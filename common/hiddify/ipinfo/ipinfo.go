@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	C "github.com/sagernet/sing-box/constant"
+
 	"github.com/sagernet/sing-box/log"
 
 	"time"
@@ -344,10 +346,11 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 	startIndex := rand.Intn(len(providers))
 	for i := 0; i < len(providers); i++ {
 		provider := providers[(i+startIndex)%len(providers)]
-
-		ipInfo, t, err := provider.GetIPInfo(ctx, detour)
+		testCtx, cancel := context.WithTimeout(ctx, C.TCPTimeout)
+		defer cancel()
+		ipInfo, t, err := provider.GetIPInfo(testCtx, detour)
 		if err != nil {
-			logger.Warn("Failed to get IP info: ", provider.GetName(), err)
+			logger.Warn("Failed to get IP info: ", provider.GetName(), " ", err)
 			lastErr = err
 			continue
 		}
