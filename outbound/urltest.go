@@ -424,7 +424,9 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			}
 			// g.router.Exchange()
 			if ip == nil {
-				newip, t2, err := ipinfo.GetIpInfo(g.logger,testCtx, detour)
+				testCtx2, cancel2 := context.WithTimeout(g.ctx, C.TCPTimeout*3)
+				defer cancel2()
+				newip, t2, err := ipinfo.GetIpInfo(g.logger, testCtx2, detour)
 				if err != nil {
 					g.logger.Debug("outbound ", tag, " IP unavailable (", t2, "ms): ", err)
 				} else {
