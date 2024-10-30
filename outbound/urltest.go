@@ -422,8 +422,9 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			if history != nil {
 				ip = history.IpInfo
 			}
+			// g.router.Exchange()
 			if ip == nil {
-				newip, t2, err := ipinfo.GetIpInfo(testCtx, detour)
+				newip, t2, err := ipinfo.GetIpInfo(g.logger,testCtx, detour)
 				if err != nil {
 					g.logger.Debug("outbound ", tag, " IP unavailable (", t2, "ms): ", err)
 				} else {
@@ -447,6 +448,7 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 		})
 	}
 	b.Wait()
+
 	g.performUpdateCheck()
 	return result, nil
 }

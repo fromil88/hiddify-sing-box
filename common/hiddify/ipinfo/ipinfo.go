@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/sagernet/sing-box/log"
 
 	"time"
 
@@ -30,6 +31,7 @@ var providers = []Provider{
 // Provider interface for all IP providers.
 type Provider interface {
 	GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInfo, uint16, error)
+	GetName() string
 }
 
 // IpInfo stores the IP information from the API response.
@@ -48,6 +50,10 @@ type IpInfo struct {
 // BaseProvider struct to handle common logic (HTTP request).
 type BaseProvider struct {
 	URL string
+}
+
+func (p *BaseProvider) GetName() string {
+	return p.URL
 }
 
 // fetchData retrieves the data from the provider's URL with a custom user agent and dialer.
@@ -333,7 +339,7 @@ func (p *IpInfoIoProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpI
 }
 
 // getCurrentIpInfo iterates over the providers to fetch and parse IP information.
-func GetIpInfo(ctx context.Context, detour N.Dialer) (*IpInfo, uint16, error) {
+func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo, uint16, error) {
 	var lastErr error
 	startIndex := rand.Intn(len(providers))
 	for i := 0; i < len(providers); i++ {
@@ -341,7 +347,7 @@ func GetIpInfo(ctx context.Context, detour N.Dialer) (*IpInfo, uint16, error) {
 
 		ipInfo, t, err := provider.GetIPInfo(ctx, detour)
 		if err != nil {
-			log.Printf("Failed to get IP info: %v", err)
+			logger.Warn("Failed to get IP info: ", provider.GetName(), err)
 			lastErr = err
 			continue
 		}
