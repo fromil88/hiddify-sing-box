@@ -434,24 +434,27 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 	b.Wait()
 
 	g.performUpdateCheck()
-	g.fetchUnknownOutboundsIpInfo()
+	go g.fetchUnknownOutboundsIpInfo()
 	return result, nil
 }
 func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
-	tag := RealTag(outbound)
-	his := g.history.LoadURLTestHistory(tag)
+	realTag := RealTag(outbound)
+	detour, loaded := g.router.Outbound(realTag)
+	if !loaded {
+		return
+	}
+	his := g.history.LoadURLTestHistory(realTag)
 	if his == nil || his.IpInfo != nil {
 		return
 	}
-
-	newip, t2, err := ipinfo.GetIpInfo(g.logger, g.ctx, outbound)
+	newip, t, err := ipinfo.GetIpInfo(g.logger, g.ctx, detour)
 	if err != nil {
-		g.logger.Debug("outbound ", tag, " IP unavailable (", t2, "ms): ", err)
+		g.logger.Debug("outbound ", realTag, " IP unavailable (", t, "ms): ", err)
 		return
 	}
-	g.history.AddOnlyIpToHistory(tag, &urltest.History{
+	g.history.AddOnlyIpToHistory(realTag, &urltest.History{
 		Time:   time.Now(),
-		Delay:  t2,
+		Delay:  t,
 		IpInfo: newip,
 	})
 
@@ -462,12 +465,8 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 	for _, detour := range g.outbounds {
 		realTag := RealTag(detour)
 		history := g.history.LoadURLTestHistory(realTag)
-		if history == nil || history.IpInfo != nil {
+		if history == nil || history.IpInfo != nil || history.Delay >= TimeoutDelay {
 			continue
-		}
-		detour, loaded := g.router.Outbound(realTag)
-		if !loaded {
-			return
 		}
 		b.Go(realTag, func() (any, error) {
 			g.checkHistoryIp(detour)
@@ -475,7 +474,6 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 		})
 	}
 	b.Wait()
-	return
 }
 
 func (g *URLTestGroup) performUpdateCheck() {

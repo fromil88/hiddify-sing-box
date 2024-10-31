@@ -350,7 +350,7 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 		defer cancel()
 		ipInfo, t, err := provider.GetIPInfo(testCtx, detour)
 		if err != nil {
-			logger.Warn("Failed to get IP info: ", provider.GetName(), " ", err)
+			logger.Warn("Failed try ", i, " to get IP info: ", provider.GetName(), " ", err)
 			lastErr = err
 			continue
 		}
