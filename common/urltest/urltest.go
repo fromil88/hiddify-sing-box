@@ -2,6 +2,7 @@ package urltest
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +21,11 @@ type History struct {
 	Time   time.Time      `json:"time"`
 	Delay  uint16         `json:"delay"`
 	IpInfo *ipinfo.IpInfo `json:"ipinfo"`
+}
+
+func (h *History) String() string {
+	return fmt.Sprintf("Time: %s, Delay: %d ms, IP Info: %v",
+		h.Time.Format(time.RFC3339), h.Delay, h.IpInfo)
 }
 
 type HistoryStorage struct {

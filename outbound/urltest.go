@@ -3,6 +3,7 @@ package outbound
 import (
 	"context"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -36,7 +37,7 @@ type URLTest struct {
 	myOutboundAdapter
 	ctx                          context.Context
 	tags                         []string
-	link                         string
+	links                        []string
 	interval                     time.Duration
 	tolerance                    uint16
 	idleTimeout                  time.Duration
@@ -45,6 +46,10 @@ type URLTest struct {
 }
 
 func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.URLTestOutboundOptions) (*URLTest, error) {
+	links := options.URLs
+	if options.URL != "" && !slices.Contains(links, options.URL) || len(links) == 0 {
+		links = append([]string{options.URL}, links...)
+	}
 	outbound := &URLTest{
 		myOutboundAdapter: myOutboundAdapter{
 			protocol:     C.TypeURLTest,
@@ -56,7 +61,7 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 		},
 		ctx:                          ctx,
 		tags:                         options.Outbounds,
-		link:                         options.URL,
+		links:                        links,
 		interval:                     time.Duration(options.Interval),
 		tolerance:                    options.Tolerance,
 		idleTimeout:                  time.Duration(options.IdleTimeout),
@@ -82,7 +87,7 @@ func (s *URLTest) Start() error {
 		s.router,
 		s.logger,
 		outbounds,
-		s.link,
+		s.links,
 		s.interval,
 		s.tolerance,
 		s.idleTimeout,
@@ -207,7 +212,7 @@ type URLTestGroup struct {
 	router                       adapter.Router
 	logger                       log.Logger
 	outbounds                    []adapter.Outbound
-	link                         string
+	links                        []string
 	interval                     time.Duration
 	tolerance                    uint16
 	idleTimeout                  time.Duration
@@ -227,6 +232,8 @@ type URLTestGroup struct {
 
 	tcpConnectionFailureCount MinZeroAtomicInt64
 	udpConnectionFailureCount MinZeroAtomicInt64
+
+	currentLinkIndex int
 }
 
 func NewURLTestGroup(
@@ -234,7 +241,7 @@ func NewURLTestGroup(
 	router adapter.Router,
 	logger log.Logger,
 	outbounds []adapter.Outbound,
-	link string,
+	links []string,
 	interval time.Duration,
 	tolerance uint16,
 	idleTimeout time.Duration,
@@ -264,7 +271,6 @@ func NewURLTestGroup(
 		router:                       router,
 		logger:                       logger,
 		outbounds:                    outbounds,
-		link:                         link,
 		interval:                     interval,
 		tolerance:                    tolerance,
 		idleTimeout:                  idleTimeout,
@@ -385,6 +391,9 @@ func (g *URLTestGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
 
 func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {
 	result := make(map[string]uint16)
+	if t := g.selectedOutboundTCP; t != nil {
+		go g.urltestImp(RealTag(t), false)
+	}
 	if g.checking.Swap(true) {
 		return result, nil
 	}
@@ -403,48 +412,77 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			continue
 		}
 		checked[realTag] = true
-		p, loaded := g.router.Outbound(realTag)
-		if !loaded {
-			continue
-		}
-		b.Go(realTag, func() (any, error) {
-			testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
-			defer cancel()
-			t, err := urltest.URLTest(testCtx, g.link, p)
-			if err != nil {
-				g.logger.Debug("outbound ", realTag, " unavailable (", TimeoutDelay, "ms): ", err)
-				// g.history.DeleteURLTestHistory(realTag)
-				t = TimeoutDelay
-			} else {
-				g.logger.Debug("outbound ", realTag, " available: ", t, "ms")
-			}
-			g.history.StoreURLTestHistory(realTag, &urltest.History{
-				Time:  time.Now(),
-				Delay: t,
-			})
 
+		b.Go(realTag, func() (any, error) {
+			t := g.urltestImp(realTag, false)
 			resultAccess.Lock()
 			result[tag] = t
 			g.performUpdateCheck()
 			resultAccess.Unlock()
-
 			return nil, nil
 		})
 	}
 	b.Wait()
 
 	g.performUpdateCheck()
-	go g.fetchUnknownOutboundsIpInfo()
+	if g.hasDelay() {
+		go g.fetchUnknownOutboundsIpInfo()
+	} else {
+		g.currentLinkIndex = (g.currentLinkIndex + 1) % len(g.links)
+		if g.currentLinkIndex != 0 {
+			g.urlTest(ctx, force)
+		}
+	}
 	return result, nil
+}
+
+func (g *URLTestGroup) hasDelay() bool {
+	for _, detour := range g.outbounds {
+		if !common.Contains(detour.Network(), "tcp") {
+			continue
+		}
+		history := g.history.LoadURLTestHistory(RealTag(detour))
+		if history == nil || history.Delay == TimeoutDelay {
+			continue
+		}
+		return true
+	}
+	return false
+}
+func (g *URLTestGroup) urltestImp(realTag string, reselect_outbound bool) uint16 {
+	p, loaded := g.router.Outbound(realTag)
+	if !loaded {
+		return TimeoutDelay
+	}
+	testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
+	defer cancel()
+	t, err := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], p)
+	if err != nil {
+		g.logger.Debug("outbound ", realTag, " unavailable (", TimeoutDelay, "ms): ", err)
+		// g.history.DeleteURLTestHistory(realTag)
+		t = TimeoutDelay
+	} else {
+		g.logger.Debug("outbound ", realTag, " available: ", t, "ms")
+	}
+	g.history.StoreURLTestHistory(realTag, &urltest.History{
+		Time:  time.Now(),
+		Delay: t,
+	})
+	if reselect_outbound {
+		g.performUpdateCheck()
+	}
+	return t
 }
 func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 	realTag := RealTag(outbound)
 	detour, loaded := g.router.Outbound(realTag)
 	if !loaded {
+		g.logger.Debug("checkHistoryIp ", realTag, " not loaded")
 		return
 	}
 	his := g.history.LoadURLTestHistory(realTag)
 	if his == nil || his.IpInfo != nil {
+		g.logger.Debug("his ", his, " is null")
 		return
 	}
 	newip, t, err := ipinfo.GetIpInfo(g.logger, g.ctx, detour)
@@ -452,6 +490,7 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 		g.logger.Debug("outbound ", realTag, " IP unavailable (", t, "ms): ", err)
 		return
 	}
+	g.logger.Trace("outbound ", realTag, " IP ", newip, " (", t, "ms): ", err)
 	g.history.AddOnlyIpToHistory(realTag, &urltest.History{
 		Time:   time.Now(),
 		Delay:  t,
@@ -468,7 +507,7 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 		if history == nil || history.IpInfo != nil || history.Delay >= TimeoutDelay {
 			continue
 		}
-		b.Go(realTag, func() (any, error) {
+		b.Go(realTag+"ip", func() (any, error) {
 			g.checkHistoryIp(detour)
 			return nil, nil
 		})

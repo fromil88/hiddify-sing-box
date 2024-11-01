@@ -48,6 +48,10 @@ type IpInfo struct {
 	Longitude   float64 `json:"longitude,omitempty"`
 	PostalCode  string  `json:"postal_code,omitempty"`
 }
+func (ip *IpInfo) String() string {
+	return fmt.Sprintf("IP: %s, Country: %s, Region: %s, City: %s, ASN: %d, Org: %s, Latitude: %.6f, Longitude: %.6f, Postal Code: %s",
+		ip.IP, ip.CountryCode, ip.Region, ip.City, ip.ASN, ip.Org, ip.Latitude, ip.Longitude, ip.PostalCode)
+}
 
 // BaseProvider struct to handle common logic (HTTP request).
 type BaseProvider struct {
