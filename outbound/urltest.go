@@ -47,7 +47,7 @@ type URLTest struct {
 
 func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.URLTestOutboundOptions) (*URLTest, error) {
 	links := options.URLs
-	if options.URL != "" && !slices.Contains(links, options.URL) || len(links) == 0 {
+	if len(links) == 0 || (options.URL != "" && !slices.Contains(links, options.URL)) {
 		links = append([]string{options.URL}, links...)
 	}
 	outbound := &URLTest{
@@ -275,6 +275,7 @@ func NewURLTestGroup(
 		tolerance:                    tolerance,
 		idleTimeout:                  idleTimeout,
 		history:                      history,
+		links:                        links,
 		close:                        make(chan struct{}),
 		pauseManager:                 service.FromContext[pause.Manager](ctx),
 		interruptGroup:               interrupt.NewGroup(),
