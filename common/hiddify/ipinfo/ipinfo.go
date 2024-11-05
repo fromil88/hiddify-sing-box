@@ -48,6 +48,7 @@ type IpInfo struct {
 	Longitude   float64 `json:"longitude,omitempty"`
 	PostalCode  string  `json:"postal_code,omitempty"`
 }
+
 func (ip *IpInfo) String() string {
 	return fmt.Sprintf("IP: %s, Country: %s, Region: %s, City: %s, ASN: %d, Org: %s, Latitude: %.6f, Longitude: %.6f, Postal Code: %s",
 		ip.IP, ip.CountryCode, ip.Region, ip.City, ip.ASN, ip.Org, ip.Latitude, ip.Longitude, ip.PostalCode)
@@ -290,7 +291,7 @@ type IpInfoIoProvider struct {
 
 func NewIpInfoIoProvider() *IpInfoIoProvider {
 	return &IpInfoIoProvider{
-		BaseProvider: BaseProvider{URL: "https://ipinfo.io/json/"},
+		BaseProvider: BaseProvider{URL: "https://ipinfo.io/json"},
 	}
 }
 
@@ -351,8 +352,8 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 	for i := 0; i < len(providers); i++ {
 		provider := providers[(i+startIndex)%len(providers)]
 		testCtx, cancel := context.WithTimeout(ctx, C.TCPTimeout)
-		defer cancel()
 		ipInfo, t, err := provider.GetIPInfo(testCtx, detour)
+		cancel()
 		if err != nil {
 			logger.Warn("Failed try ", i, " to get IP info: ", provider.GetName(), " ", err)
 			lastErr = err

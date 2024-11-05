@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"slices"
 	"sync"
@@ -163,7 +164,11 @@ func (s *URLTest) DialContext(ctx context.Context, network string, destination M
 	}
 
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.DeleteURLTestHistory(outbound.Tag())
+	s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
+		Time:  time.Now(),
+		Delay: TimeoutDelay,
+	})
+	// s.group.history.DeleteURLTestHistory(outbound.Tag())
 	return nil, err
 }
 
@@ -188,7 +193,11 @@ func (s *URLTest) ListenPacket(ctx context.Context, destination M.Socksaddr) (ne
 		s.group.urlTest(ctx, true)
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.DeleteURLTestHistory(outbound.Tag())
+	s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
+		Time:  time.Now(),
+		Delay: TimeoutDelay,
+	})
+	// s.group.history.DeleteURLTestHistory(outbound.Tag())
 	return nil, err
 }
 
@@ -500,16 +509,21 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 
 }
 func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
+	g.logger.Trace("fetchUnknownOutboundsIpInfo")
 
 	b, _ := batch.New(g.ctx, batch.WithConcurrencyNum[any](10))
 	for _, detour := range g.outbounds {
 		realTag := RealTag(detour)
 		history := g.history.LoadURLTestHistory(realTag)
+		g.logger.Trace(realTag, fmt.Sprintf(" history=%v, ipinfo=%v, delay=%v", history, history.IpInfo, history.Delay))
 		if history == nil || history.IpInfo != nil || history.Delay >= TimeoutDelay {
 			continue
 		}
+		g.logger.Trace("getting IP... ", realTag)
 		b.Go(realTag+"ip", func() (any, error) {
+			g.logger.Trace("get IP start ", realTag)
 			g.checkHistoryIp(detour)
+			g.logger.Trace("get IP end ", realTag)
 			return nil, nil
 		})
 	}

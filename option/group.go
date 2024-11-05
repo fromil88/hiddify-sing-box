@@ -9,7 +9,7 @@ type SelectorOutboundOptions struct {
 type URLTestOutboundOptions struct {
 	Outbounds                 []string `json:"outbounds"`
 	URL                       string   `json:"url,omitempty"`
-	URLs           []string  `json:"urls,omitempty"`
+	URLs                      []string `json:"urls,omitempty"`
 	Interval                  Duration `json:"interval,omitempty"`
 	Tolerance                 uint16   `json:"tolerance,omitempty"`
 	IdleTimeout               Duration `json:"idle_timeout,omitempty"`
