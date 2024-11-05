@@ -515,7 +515,11 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 	for _, detour := range g.outbounds {
 		realTag := RealTag(detour)
 		history := g.history.LoadURLTestHistory(realTag)
-		g.logger.Trace(realTag, fmt.Sprintf(" history=%v, ipinfo=%v, delay=%v", history, history.IpInfo, history.Delay))
+		if history == nil {
+			g.logger.Trace(realTag, fmt.Sprintf(" history is nil"))
+			return
+		}
+		g.logger.Trace(realTag, fmt.Sprintf(" ipinfo=%v, delay=%v", history.IpInfo, history.Delay))
 		if history == nil || history.IpInfo != nil || history.Delay >= TimeoutDelay {
 			continue
 		}
