@@ -435,8 +435,8 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 	b.Wait()
 
 	g.performUpdateCheck()
-	if g.hasDelay() {
-		go g.fetchUnknownOutboundsIpInfo()
+	if !g.hasDelay() {
+		g.fetchUnknownOutboundsIpInfo()
 	} else {
 		g.currentLinkIndex = (g.currentLinkIndex + 1) % len(g.links)
 		if g.currentLinkIndex != 0 {
@@ -484,15 +484,22 @@ func (g *URLTestGroup) urltestImp(realTag string, reselect_outbound bool) uint16
 	return t
 }
 func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
+	if outbound == nil {
+		return
+	}
 	realTag := RealTag(outbound)
 	detour, loaded := g.router.Outbound(realTag)
 	if !loaded {
-		g.logger.Debug("checkHistoryIp ", realTag, " not loaded")
+		g.logger.Debug("checkHistoryIp ", outbound.Tag(), " not loaded")
 		return
 	}
 	his := g.history.LoadURLTestHistory(realTag)
-	if his == nil || his.IpInfo != nil {
-		g.logger.Debug("his ", his, " is null")
+	if his == nil {
+		g.logger.Debug("history  is null")
+		return
+	}
+	if his.IpInfo != nil {
+		g.logger.Debug("ip already calculated ", his.IpInfo)
 		return
 	}
 	newip, t, err := ipinfo.GetIpInfo(g.logger, g.ctx, detour)
@@ -510,10 +517,14 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 }
 func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 	g.logger.Trace("fetchUnknownOutboundsIpInfo")
+	g.logger.Trace("outbounds ", len(g.outbounds))
 
 	b, _ := batch.New(g.ctx, batch.WithConcurrencyNum[any](10))
-	for _, detour := range g.outbounds {
+	for _, detour0 := range g.outbounds {
+		detour := detour0
+
 		realTag := RealTag(detour)
+		g.logger.Trace("check IP ", realTag)
 		history := g.history.LoadURLTestHistory(realTag)
 		if history == nil {
 			g.logger.Trace(realTag, fmt.Sprintf(" history is nil"))
@@ -531,7 +542,7 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 			return nil, nil
 		})
 	}
-	b.Wait()
+	go b.Wait()
 }
 
 func (g *URLTestGroup) performUpdateCheck() {
