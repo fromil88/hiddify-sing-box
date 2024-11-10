@@ -469,12 +469,15 @@ func (g *URLTestGroup) hasOneAvailableOutbound() bool {
 		if !common.Contains(detour.Network(), "tcp") {
 			continue
 		}
-		history := g.history.LoadURLTestHistory(RealTag(detour))
+		realTag := RealTag(detour)
+		history := g.history.LoadURLTestHistory(realTag)
 		if history == nil || history.Delay == TimeoutDelay {
 			continue
 		}
+		g.logger.Debug("has one outbound ", realTag, " available: ", history.Delay, "ms")
 		return true
 	}
+	g.logger.Debug("no available outbound ")
 	return false
 }
 func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbound bool) uint16 {
