@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -493,13 +494,17 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 		g.logger.Debug("checkHistoryIp ", outbound.Tag(), " not loaded")
 		return
 	}
+	if g.history == nil {
+		g.logger.Debug("g.history  is null")
+		return
+	}
 	his := g.history.LoadURLTestHistory(realTag)
 	if his == nil {
 		g.logger.Debug("history  is null")
 		return
 	}
 	if his.IpInfo != nil {
-		g.logger.Debug("ip already calculated ", his.IpInfo)
+		g.logger.Debug("ip already calculated ", fmt.Sprint(his.IpInfo))
 		return
 	}
 	newip, t, err := ipinfo.GetIpInfo(g.logger, g.ctx, detour)
@@ -507,7 +512,7 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 		g.logger.Debug("outbound ", realTag, " IP unavailable (", t, "ms): ", err)
 		return
 	}
-	g.logger.Trace("outbound ", realTag, " IP ", newip, " (", t, "ms): ", err)
+	g.logger.Trace("outbound ", realTag, " IP ", fmt.Sprint(newip), " (", t, "ms): ", err)
 	g.history.AddOnlyIpToHistory(realTag, &urltest.History{
 		Time:   time.Now(),
 		Delay:  t,
@@ -516,6 +521,13 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 
 }
 func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
+	defer func() {
+		if r := recover(); r != nil {
+			s := fmt.Errorf("%s panicf:\n%s", r, string(debug.Stack()))
+			log.Error(s)
+			<-time.After(5 * time.Second)
+		}
+	}()
 	g.logger.Trace("fetchUnknownOutboundsIpInfo")
 	g.logger.Trace("outbounds ", len(g.outbounds))
 
@@ -525,21 +537,38 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 
 		realTag := RealTag(detour)
 		g.logger.Trace("check IP ", realTag)
+		if g.history == nil {
+			g.logger.Trace("g.history is nil How it happened!!! ")
+			continue
+		}
 		history := g.history.LoadURLTestHistory(realTag)
 		if history == nil {
 			g.logger.Trace(realTag, fmt.Sprintf(" history is nil"))
-			return
+			continue
 		}
-		g.logger.Trace(realTag, fmt.Sprintf(" ipinfo=%v, delay=%v", history.IpInfo, history.Delay))
-		if history == nil || history.IpInfo != nil || history.Delay >= TimeoutDelay {
+		if history.Delay >= TimeoutDelay {
+			g.logger.Trace(realTag, fmt.Sprintf(" outbound unavailble skipping getting ip"))
+			continue
+		}
+
+		if history.IpInfo != nil {
+			g.logger.Trace(realTag, "outbound has already ip ")
+			g.logger.Trace(realTag, "outbound has already ip ", fmt.Sprint(history.IpInfo))
 			continue
 		}
 		g.logger.Trace("getting IP... ", realTag)
 		b.Go(realTag+"ip", func() (any, error) {
+			defer func() {
+				if r := recover(); r != nil {
+					s := fmt.Errorf("%s panic: %s\n%s", realTag, r, string(debug.Stack()))
+					log.Error(s)
+					<-time.After(5 * time.Second)
+				}
+			}()
 			g.logger.Trace("get IP start ", realTag)
 			g.checkHistoryIp(detour)
 			g.logger.Trace("get IP end ", realTag)
-			return nil, nil
+			return "", nil
 		})
 	}
 	go b.Wait()
