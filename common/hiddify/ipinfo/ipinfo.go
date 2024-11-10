@@ -30,6 +30,7 @@ var providers = []Provider{
 	NewIpApiProvider(),
 	NewMyIPExpertProvider(),
 	NewMyIPioProvider(),
+	NewReallyFreeGeoIPProvider(),
 }
 
 var fallbackProviders = []Provider{
