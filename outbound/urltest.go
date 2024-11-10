@@ -439,7 +439,7 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 	b.Wait()
 
 	g.performUpdateCheck()
-	if g.hasDelay() {
+	if g.hasOneAvailableOutbound() {
 		g.fetchUnknownOutboundsIpInfo()
 	} else {
 		g.currentLinkIndex = (g.currentLinkIndex + 1) % len(g.links)
@@ -450,7 +450,17 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 	return result, nil
 }
 
-func (g *URLTestGroup) hasDelay() bool {
+func (g *URLTestGroup) ForceRecheckOutbound(outbound adapter.Outbound) error {
+	for _, detour := range g.outbounds {
+		if detour.Tag() == outbound.Tag() {
+			g.urltestImp(outbound, false)
+			g.checkHistoryIp(outbound)
+			return nil
+		}
+	}
+	return fmt.Errorf("Outbound not found")
+}
+func (g *URLTestGroup) hasOneAvailableOutbound() bool {
 	for _, detour := range g.outbounds {
 		if !common.Contains(detour.Network(), "tcp") {
 			continue
