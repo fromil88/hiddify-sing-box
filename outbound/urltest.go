@@ -134,6 +134,10 @@ func (s *URLTest) CheckOutbounds() {
 	s.group.CheckOutbounds(true)
 }
 
+func (s *URLTest) ForceRecheckOutbound(outbound adapter.Outbound) error {
+	return s.group.ForceRecheckOutbound(outbound)
+}
+
 func (s *URLTest) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	s.group.Touch()
 	var outbound adapter.Outbound
