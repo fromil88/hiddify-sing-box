@@ -94,6 +94,9 @@ func (w *StackDevice) NewEndpoint() (stack.LinkEndpoint, error) {
 }
 
 func (w *StackDevice) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	if !destination.Addr.Is4() && !destination.Addr.Is6() {
+		return nil, E.New("Invalid destination Addr %v", destination.Addr)
+	}
 	addr := tcpip.FullAddress{
 		NIC:  defaultNIC,
 		Port: destination.Port,
@@ -129,6 +132,9 @@ func (w *StackDevice) DialContext(ctx context.Context, network string, destinati
 }
 
 func (w *StackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	if !destination.Addr.Is4() && !destination.Addr.Is6() {
+		return nil, E.New("Invalid destination Addr %v", destination.Addr)
+	}
 	bind := tcpip.FullAddress{
 		NIC: defaultNIC,
 	}
