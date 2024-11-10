@@ -135,6 +135,10 @@ func (s *URLTest) CheckOutbounds() {
 }
 
 func (s *URLTest) ForceRecheckOutbound(outboundTag string) error {
+	if s.Tag() == outboundTag {
+		_, err := s.group.urlTest(s.ctx, true)
+		return err
+	}
 	return s.group.ForceRecheckOutbound(outboundTag)
 }
 
