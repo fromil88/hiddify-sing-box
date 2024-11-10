@@ -134,8 +134,8 @@ func (s *URLTest) CheckOutbounds() {
 	s.group.CheckOutbounds(true)
 }
 
-func (s *URLTest) ForceRecheckOutbound(outbound adapter.Outbound) error {
-	return s.group.ForceRecheckOutbound(outbound)
+func (s *URLTest) ForceRecheckOutbound(outboundTag string) error {
+	return s.group.ForceRecheckOutbound(outboundTag)
 }
 
 func (s *URLTest) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
@@ -454,11 +454,11 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 	return result, nil
 }
 
-func (g *URLTestGroup) ForceRecheckOutbound(outbound adapter.Outbound) error {
+func (g *URLTestGroup) ForceRecheckOutbound(outboundTag string) error {
 	for _, detour := range g.outbounds {
-		if detour.Tag() == outbound.Tag() {
-			g.urltestImp(outbound, false)
-			g.checkHistoryIp(outbound)
+		if detour.Tag() == outboundTag {
+			g.urltestImp(detour, false)
+			g.checkHistoryIp(detour)
 			return nil
 		}
 	}
