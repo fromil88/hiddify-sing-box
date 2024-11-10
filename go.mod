@@ -26,7 +26,7 @@ require (
 	github.com/oschwald/maxminddb-golang v1.12.0
 	github.com/pion/logging v0.2.2
 	github.com/pion/turn/v3 v3.0.1
-	github.com/pires/go-proxyproto v0.7.0
+	github.com/pires/go-proxyproto v0.8.0
 	github.com/sagernet/bbolt v0.0.0-20231014093535-ea5cb2fe9f0a
 	github.com/sagernet/cloudflare-tls v0.0.0-20231208171750-a4483c1b7cd1
 	github.com/sagernet/gomobile v0.1.4
@@ -50,23 +50,25 @@ require (
 	github.com/xtls/xray-core v1.8.21
 	go.uber.org/zap v1.27.0
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
-	golang.org/x/crypto v0.27.0
-	golang.org/x/net v0.29.0
-	golang.org/x/sys v0.25.0
-	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230429144221-925a1e7659e6
-	google.golang.org/grpc v1.67.0
-	google.golang.org/protobuf v1.34.2
+	golang.org/x/crypto v0.28.0
+	golang.org/x/net v0.30.0
+	golang.org/x/sys v0.26.0
+	google.golang.org/grpc v1.67.1
+	google.golang.org/protobuf v1.35.1
 	howett.net/plist v1.0.1
 )
 
 //replace github.com/sagernet/sing => ../sing
 
-require github.com/sagernet/wireguard-go v0.0.0-00010101000000-000000000000
+require (
+	github.com/biter777/countries v1.7.5
+	github.com/sagernet/wireguard-go v0.0.0-00010101000000-000000000000
+	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230429144221-925a1e7659e6
+)
 
 require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/biter777/countries v1.7.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
@@ -112,7 +114,7 @@ require (
 	golang.org/x/exp v0.0.0-20240531132922-fd00a4e0eefc // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
+	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
@@ -124,4 +126,4 @@ require (
 
 replace github.com/sagernet/wireguard-go => github.com/hiddify/wireguard-go v0.0.0-20240727191222-383c1da14ff1
 
-replace github.com/xtls/xray-core => github.com/hiddify/xray-core v0.0.0-20241019134126-3f94892df016
+replace github.com/xtls/xray-core => github.com/hiddify/xray-core v0.0.0-20241110202159-0fd7ffea9361

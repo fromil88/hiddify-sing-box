@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 
 	C "github.com/sagernet/sing-box/constant"
 
@@ -179,14 +178,14 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 	return nil, 65535, fmt.Errorf("unable to retrieve IP info: %v", lastErr)
 }
 
-func init() {
-	// Instantiate the providers.
+// func init() {
+// 	// Instantiate the providers.
 
-	for _, provider := range providers {
-		x, _, err := provider.GetIPInfo(context.Background(), nil)
-		fmt.Printf("%s:   %++v\n%++v\n", provider, x, err)
-	}
-	// Get IP information.
+// 	for _, provider := range providers {
+// 		x, _, err := provider.GetIPInfo(context.Background(), nil)
+// 		fmt.Printf("%s:   %++v\n%++v\n", provider, x, err)
+// 	}
+// 	// Get IP information.
 
-	os.Exit(0)
-}
+// 	os.Exit(0)
+// }
