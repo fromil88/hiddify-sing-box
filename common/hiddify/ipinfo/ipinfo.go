@@ -9,8 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
+	"os"
 
 	C "github.com/sagernet/sing-box/constant"
 
@@ -28,6 +27,15 @@ var providers = []Provider{
 	NewIpSbProvider(),
 	NewIpApiCoProvider(),
 	NewIpInfoIoProvider(),
+	NewFreeIpApiProvider(),
+	NewIpApiProvider(),
+	NewMyIPExpertProvider(),
+	NewMyIPioProvider(),
+}
+
+var fallbackProviders = []Provider{
+	NewMyIPProvider(),
+	// NewCloudflareTraceProvider(),
 }
 
 // Provider interface for all IP providers.
@@ -81,30 +89,39 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 		}
 	}
 
-	start := time.Now()
-	instance, err := detour.DialContext(ctx, "tcp", M.ParseSocksaddrHostPortStr(hostname, port))
-	if err != nil {
-		return nil, 65535, err
-	}
-	defer instance.Close()
-	if earlyConn, isEarlyConn := common.Cast[N.EarlyConn](instance); isEarlyConn && earlyConn.NeedHandshake() {
-		start = time.Now()
-	}
 	req, err := http.NewRequest(http.MethodGet, link, nil)
 	if err != nil {
 		return nil, 65535, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0")
+	start := time.Now()
+	var client http.Client
+	if detour != nil {
+		instance, err := detour.DialContext(ctx, "tcp", M.ParseSocksaddrHostPortStr(hostname, port))
+		if err != nil {
+			return nil, 65535, err
+		}
+		defer instance.Close()
+		if earlyConn, isEarlyConn := common.Cast[N.EarlyConn](instance); isEarlyConn && earlyConn.NeedHandshake() {
+			start = time.Now()
+		}
 
-	client := http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return instance, nil
+		client = http.Client{
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return instance, nil
+				},
 			},
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+	} else {
+		client = http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 	defer client.CloseIdleConnections()
 	resp, err := client.Do(req.WithContext(ctx))
@@ -131,220 +148,6 @@ func (p *BaseProvider) fetchData(ctx context.Context, detour N.Dialer) (map[stri
 
 }
 
-// IpWhoIsProvider struct and implementation.
-type IpWhoIsProvider struct {
-	BaseProvider
-}
-
-func NewIpWhoIsProvider() *IpWhoIsProvider {
-	return &IpWhoIsProvider{
-		BaseProvider: BaseProvider{URL: "https://ipwho.is/"},
-	}
-}
-
-func (p *IpWhoIsProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInfo, uint16, error) {
-	info := &IpInfo{}
-	data, t, err := p.fetchData(ctx, dialer)
-	if err != nil {
-		return nil, t, err
-	}
-
-	if ip, ok := data["ip"].(string); ok {
-		info.IP = ip
-	}
-	if countryCode, ok := data["country_code"].(string); ok {
-		info.CountryCode = countryCode
-	}
-	if region, ok := data["region"].(string); ok {
-		info.Region = region
-	}
-	if city, ok := data["city"].(string); ok {
-		info.City = city
-	}
-
-	if connection, ok := data["connection"].(map[string]interface{}); ok {
-		if asn, ok := connection["asn"].(float64); ok {
-			info.ASN = int(asn)
-		}
-		if org, ok := connection["org"].(string); ok {
-			info.Org = org
-		}
-	}
-
-	if latitude, ok := data["latitude"].(float64); ok {
-		info.Latitude = latitude
-	}
-	if longitude, ok := data["longitude"].(float64); ok {
-		info.Longitude = longitude
-	}
-	if postalCode, ok := data["postal"].(string); ok {
-		info.PostalCode = postalCode
-	}
-	return info, t, nil
-}
-
-// IpSbProvider struct and implementation.
-type IpSbProvider struct {
-	BaseProvider
-}
-
-func NewIpSbProvider() *IpSbProvider {
-	return &IpSbProvider{
-		BaseProvider: BaseProvider{URL: "https://api.ip.sb/geoip/"},
-	}
-}
-
-func (p *IpSbProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInfo, uint16, error) {
-	info := &IpInfo{}
-	data, t, err := p.fetchData(ctx, dialer)
-	if err != nil {
-		return nil, t, err
-	}
-
-	if ip, ok := data["ip"].(string); ok {
-		info.IP = ip
-	}
-	if countryCode, ok := data["country_code"].(string); ok {
-		info.CountryCode = countryCode
-	}
-	if region, ok := data["region"].(string); ok {
-		info.Region = region
-	}
-	if city, ok := data["city"].(string); ok {
-		info.City = city
-	}
-	if asn, ok := data["asn"].(float64); ok {
-		info.ASN = int(asn)
-	}
-	if org, ok := data["asn_organization"].(string); ok {
-		info.Org = org
-	}
-	if latitude, ok := data["latitude"].(float64); ok {
-		info.Latitude = latitude
-	}
-	if longitude, ok := data["longitude"].(float64); ok {
-		info.Longitude = longitude
-	}
-	if postalCode, ok := data["postal_code"].(string); ok {
-		info.PostalCode = postalCode
-	}
-	return info, t, nil
-}
-
-// IpApiCoProvider struct and implementation.
-type IpApiCoProvider struct {
-	BaseProvider
-}
-
-func NewIpApiCoProvider() *IpApiCoProvider {
-	return &IpApiCoProvider{
-		BaseProvider: BaseProvider{URL: "https://ipapi.co/json/"},
-	}
-}
-
-func (p *IpApiCoProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInfo, uint16, error) {
-	info := &IpInfo{}
-	data, t, err := p.fetchData(ctx, dialer)
-	if err != nil {
-		return nil, t, err
-	}
-
-	if ip, ok := data["ip"].(string); ok {
-		info.IP = ip
-	}
-	if countryCode, ok := data["country_code"].(string); ok {
-		info.CountryCode = countryCode
-	}
-	if region, ok := data["region"].(string); ok {
-		info.Region = region
-	}
-	if city, ok := data["city"].(string); ok {
-		info.City = city
-	}
-	if asnstr, ok := data["asn"].(string); ok {
-		if strings.HasPrefix(asnstr, "AS") {
-			if asn, ok := strconv.ParseInt(strings.TrimPrefix(asnstr, "AS"), 10, 64); ok == nil {
-				info.ASN = int(asn)
-			}
-		}
-	}
-	if org, ok := data["org"].(string); ok {
-		info.Org = org
-	}
-	if latitude, ok := data["latitude"].(float64); ok {
-		info.Latitude = latitude
-	}
-	if longitude, ok := data["longitude"].(float64); ok {
-		info.Longitude = longitude
-	}
-
-	if postalCode, ok := data["postal"].(string); ok {
-		info.PostalCode = postalCode
-	}
-	return info, t, nil
-}
-
-// IpInfoIoProvider struct and implementation.
-type IpInfoIoProvider struct {
-	BaseProvider
-}
-
-func NewIpInfoIoProvider() *IpInfoIoProvider {
-	return &IpInfoIoProvider{
-		BaseProvider: BaseProvider{URL: "https://ipinfo.io/json"},
-	}
-}
-
-func (p *IpInfoIoProvider) GetIPInfo(ctx context.Context, dialer N.Dialer) (*IpInfo, uint16, error) {
-	info := &IpInfo{}
-	data, t, err := p.fetchData(ctx, dialer)
-	if err != nil {
-		return nil, t, err
-	}
-
-	if ip, ok := data["ip"].(string); ok {
-		info.IP = ip
-	}
-	if city, ok := data["city"].(string); ok {
-		info.City = city
-	}
-	if region, ok := data["region"].(string); ok {
-		info.Region = region
-	}
-	if country, ok := data["country"].(string); ok {
-		info.CountryCode = country
-	}
-	if loc, ok := data["loc"].(string); ok {
-		// Split loc into latitude and longitude
-		coords := strings.Split(loc, ",")
-		if len(coords) == 2 {
-			if latitude, err := strconv.ParseFloat(coords[0], 64); err == nil {
-				info.Latitude = latitude
-			}
-			if longitude, err := strconv.ParseFloat(coords[1], 64); err == nil {
-				info.Longitude = longitude
-			}
-		}
-	}
-	if org, ok := data["org"].(string); ok {
-		// Split the org string to extract ASN and Organization
-		orgParts := strings.SplitN(org, " ", 2) // Split into 2 parts
-		if len(orgParts) > 0 {
-			if strings.HasPrefix(orgParts[0], "AS") {
-				if asn, ok := strconv.ParseInt(strings.TrimPrefix(orgParts[0], "AS"), 10, 64); ok == nil {
-					info.ASN = int(asn)
-				}
-			}
-		}
-		info.Org = orgParts[len(orgParts)-1]
-	}
-	if postal, ok := data["postal"].(string); ok {
-		info.PostalCode = postal
-	}
-
-	return info, t, nil
-}
-
 // getCurrentIpInfo iterates over the providers to fetch and parse IP information.
 func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo, uint16, error) {
 	var lastErr error
@@ -361,24 +164,29 @@ func GetIpInfo(logger log.Logger, ctx context.Context, detour N.Dialer) (*IpInfo
 		}
 		return ipInfo, t, nil
 	}
-
+	startIndex = rand.Intn(len(fallbackProviders))
+	for i := 0; i < len(fallbackProviders); i++ {
+		provider := fallbackProviders[(i+startIndex)%len(fallbackProviders)]
+		testCtx, cancel := context.WithTimeout(ctx, C.TCPTimeout)
+		ipInfo, t, err := provider.GetIPInfo(testCtx, detour)
+		cancel()
+		if err != nil {
+			logger.Warn("Failed try ", i, " to get IP info: ", provider.GetName(), " ", err)
+			continue
+		}
+		return ipInfo, t, nil
+	}
 	return nil, 65535, fmt.Errorf("unable to retrieve IP info: %v", lastErr)
 }
 
-// func init() {
-// 	// Instantiate the providers.
-//
+func init() {
+	// Instantiate the providers.
 
-// 	for _, provider := range providers {
-// 		x, _ := provider.GetIPInfo()
-// 		fmt.Printf("%s:   %++v\n\n", provider, x)
-// 	}
-// 	// Get IP information.
-// 	ipInfo, err := getCurrentIpInfo(providers)
-// 	if err != nil {
-// 		log.Fatalf("Error fetching IP info: %v", err)
-// 	}
+	for _, provider := range providers {
+		x, _, err := provider.GetIPInfo(context.Background(), nil)
+		fmt.Printf("%s:   %++v\n%++v\n", provider, x, err)
+	}
+	// Get IP information.
 
-// 	fmt.Printf("IP Info: %+v\n", *ipInfo)
-// 	os.Exit(0)
-// }
+	os.Exit(0)
+}

@@ -66,6 +66,7 @@ require github.com/sagernet/wireguard-go v0.0.0-00010101000000-000000000000
 require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/biter777/countries v1.7.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
