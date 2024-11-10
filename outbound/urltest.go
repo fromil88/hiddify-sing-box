@@ -402,7 +402,7 @@ func (g *URLTestGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
 func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {
 	result := make(map[string]uint16)
 	if t := g.selectedOutboundTCP; t != nil {
-		go g.urltestImp(RealTag(t), false)
+		go g.urltestImp(t, false)
 	}
 	if g.checking.Swap(true) {
 		return result, nil
@@ -422,9 +422,12 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			continue
 		}
 		checked[realTag] = true
-
+		p, loaded := g.router.Outbound(realTag)
+		if !loaded {
+			continue
+		}
 		b.Go(realTag, func() (any, error) {
-			t := g.urltestImp(realTag, false)
+			t := g.urltestImp(p, false)
 			resultAccess.Lock()
 			result[tag] = t
 			g.performUpdateCheck()
@@ -435,7 +438,7 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 	b.Wait()
 
 	g.performUpdateCheck()
-	if !g.hasDelay() {
+	if g.hasDelay() {
 		g.fetchUnknownOutboundsIpInfo()
 	} else {
 		g.currentLinkIndex = (g.currentLinkIndex + 1) % len(g.links)
@@ -459,14 +462,11 @@ func (g *URLTestGroup) hasDelay() bool {
 	}
 	return false
 }
-func (g *URLTestGroup) urltestImp(realTag string, reselect_outbound bool) uint16 {
-	p, loaded := g.router.Outbound(realTag)
-	if !loaded {
-		return TimeoutDelay
-	}
+func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbound bool) uint16 {
+	realTag := RealTag(outbound)
 	testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
 	defer cancel()
-	t, err := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], p)
+	t, err := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], outbound)
 	if err != nil {
 		g.logger.Debug("outbound ", realTag, " unavailable (", TimeoutDelay, "ms): ", err)
 		// g.history.DeleteURLTestHistory(realTag)
@@ -478,7 +478,7 @@ func (g *URLTestGroup) urltestImp(realTag string, reselect_outbound bool) uint16
 		Time:  time.Now(),
 		Delay: t,
 	})
-	if reselect_outbound {
+	if update_active_outbound {
 		g.performUpdateCheck()
 	}
 	return t
