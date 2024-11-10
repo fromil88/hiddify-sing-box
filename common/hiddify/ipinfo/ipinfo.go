@@ -34,6 +34,7 @@ var providers = []Provider{
 
 var fallbackProviders = []Provider{
 	NewMyIPProvider(),
+	NewCountryIsProvider(),
 	// NewCloudflareTraceProvider(),
 }
 
