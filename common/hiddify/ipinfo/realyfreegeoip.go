@@ -32,23 +32,14 @@ func (p *ReallyFreeGeoIPProvider) GetIPInfo(ctx context.Context, dialer N.Dialer
 	if countryCode, ok := data["country_code"].(string); ok {
 		info.CountryCode = countryCode
 	}
-	if countryName, ok := data["country_name"].(string); ok {
-		info.Country = countryName
-	}
-	if regionCode, ok := data["region_code"].(string); ok {
+	if regionCode, ok := data["region_name"].(string); ok {
 		info.Region = regionCode
-	}
-	if regionName, ok := data["region_name"].(string); ok {
-		info.RegionName = regionName
 	}
 	if city, ok := data["city"].(string); ok {
 		info.City = city
 	}
 	if zipCode, ok := data["zip_code"].(string); ok {
 		info.PostalCode = zipCode
-	}
-	if timeZone, ok := data["time_zone"].(string); ok {
-		info.Timezone = timeZone
 	}
 	if latitude, ok := data["latitude"].(float64); ok {
 		info.Latitude = latitude
