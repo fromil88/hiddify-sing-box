@@ -161,12 +161,11 @@ func (s *URLTest) DialContext(ctx context.Context, network string, destination M
 	}
 	conn, err := outbound.DialContext(ctx, network, destination)
 	if err == nil {
-		// s.group.tcpConnectionFailureCount.Decrement(false)
 		s.group.tcpConnectionFailureCount.Reset()
 		return s.group.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
 
-	if !s.group.pauseManager.IsNetworkPaused() && s.group.tcpConnectionFailureCount.IncrementConditionReset(MinFailureToReset) {
+	if !s.group.checking.Load() && !s.group.pauseManager.IsNetworkPaused() && s.group.tcpConnectionFailureCount.IncrementConditionReset(MinFailureToReset) {
 		s.logger.Warn("TCP URLTest Outbound ", s.tag, " (", outboundToString(s.group.selectedOutboundTCP), ") failed to connect for ", MinFailureToReset, " times==> test proxies again!")
 		s.group.selectedOutboundTCP = nil
 		s.CheckOutbounds()
@@ -192,14 +191,13 @@ func (s *URLTest) ListenPacket(ctx context.Context, destination M.Socksaddr) (ne
 	}
 	conn, err := outbound.ListenPacket(ctx, destination)
 	if err == nil {
-		// s.group.udpConnectionFailureCount.Decrement(false)
 		s.group.udpConnectionFailureCount.Reset()
 		return s.group.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 	}
-	if !s.group.pauseManager.IsNetworkPaused() && s.group.udpConnectionFailureCount.IncrementConditionReset(MinFailureToReset) {
+	if !s.group.checking.Load() && !s.group.pauseManager.IsNetworkPaused() && s.group.udpConnectionFailureCount.IncrementConditionReset(MinFailureToReset) {
 		s.logger.Info("Hiddify! UDP URLTest Outbound ", s.tag, " (", outboundToString(s.group.selectedOutboundUDP), ") failed to connect for ", MinFailureToReset, " times==> test proxies again!")
 		s.group.selectedOutboundUDP = nil
-		s.group.urlTest(ctx, true)
+		s.CheckOutbounds()
 	}
 	s.logger.ErrorContext(ctx, err)
 	s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
@@ -573,7 +571,6 @@ func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 		}
 
 		if history.IpInfo != nil {
-			g.logger.Trace(realTag, "outbound has already ip ")
 			g.logger.Trace(realTag, "outbound has already ip ", fmt.Sprint(history.IpInfo))
 			continue
 		}
