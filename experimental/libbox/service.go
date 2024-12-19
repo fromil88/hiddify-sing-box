@@ -45,7 +45,7 @@ func NewService(configContent string, platformInterface PlatformInterface) (*Box
 		return nil, err
 	}
 	runtimeDebug.FreeOSMemory()
-	ctx, cancel := context.WithCancel(context.Background())
+	// ctx, cancel := context.WithCancel(context.Background())
 	ctx = filemanager.WithDefault(ctx, sWorkingPath, sTempPath, sUserID, sGroupID)
 	urlTestHistoryStorage := urltest.NewHistoryStorage()
 	ctx = service.ContextWithPtr(ctx, urlTestHistoryStorage)

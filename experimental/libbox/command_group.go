@@ -153,7 +153,7 @@ func writeGroups(writer io.Writer, boxService *BoxService, onlyGroupitems bool) 
 			}
 			group.ItemList = append(group.ItemList, &item)
 		}
-		if len(group.items) < 2 && !onlyGroupitems {
+		if len(group.ItemList) < 2 && !onlyGroupitems {
 			continue
 		}
 		groups = append(groups, group)
