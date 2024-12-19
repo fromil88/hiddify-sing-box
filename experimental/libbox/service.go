@@ -45,11 +45,7 @@ func NewService(configContent string, platformInterface PlatformInterface) (*Box
 		return nil, err
 	}
 	runtimeDebug.FreeOSMemory()
-	// ctx, cancel := context.WithCancel(context.Background())
-	ctx = filemanager.WithDefault(ctx, sWorkingPath, sTempPath, sUserID, sGroupID)
-	urlTestHistoryStorage := urltest.NewHistoryStorage()
-	ctx = service.ContextWithPtr(ctx, urlTestHistoryStorage)
-	ctx = service.ContextWith[deprecated.Manager](ctx, new(deprecatedManager))
+
 	platformWrapper := &platformInterfaceWrapper{iif: platformInterface, useProcFS: platformInterface.UseProcFS()}
 
 	return NewHService(box.Options{
@@ -58,9 +54,11 @@ func NewService(configContent string, platformInterface PlatformInterface) (*Box
 		PlatformLogWriter: platformWrapper,
 	})
 }
+
 func WrapPlatformInterface(platformInterface PlatformInterface) platform.Interface {
 	return &platformInterfaceWrapper{iif: platformInterface, useProcFS: platformInterface.UseProcFS()}
 }
+
 func NewHService(boptions box.Options) (*BoxService, error) {
 	runtimeDebug.FreeOSMemory()
 	parentctx := boptions.Context
@@ -71,6 +69,7 @@ func NewHService(boptions box.Options) (*BoxService, error) {
 	ctx = filemanager.WithDefault(ctx, sWorkingPath, sTempPath, sUserID, sGroupID)
 	urlTestHistoryStorage := urltest.NewHistoryStorage()
 	ctx = service.ContextWithPtr(ctx, urlTestHistoryStorage)
+	ctx = service.ContextWith[deprecated.Manager](ctx, new(deprecatedManager))
 	boptions.Context = ctx
 	instance, err := box.New(boptions)
 	if err != nil {
@@ -90,9 +89,11 @@ func NewHService(boptions box.Options) (*BoxService, error) {
 func (s *BoxService) UrlTestHistory() *urltest.HistoryStorage {
 	return s.urlTestHistoryStorage
 }
+
 func (s *BoxService) Context() context.Context {
 	return s.ctx
 }
+
 func (s *BoxService) Start() error {
 	return s.instance.Start()
 }
