@@ -34,6 +34,8 @@ type CommandServer struct {
 	urlTestUpdate observer.Property[int]
 	modeUpdate    chan struct{}
 	logReset      chan struct{}
+
+	closedConnections []Connection
 }
 
 type CommandServerHandler interface {
@@ -71,14 +73,6 @@ func (s *CommandServer) SetService(newService *BoxService) {
 	}
 	s.service = newService
 	s.notifyURLTestUpdate()
-}
-
-func (s *CommandServer) ResetLog() {
-	s.savedLines.Init()
-	select {
-	case s.logReset <- struct{}{}:
-	default:
-	}
 }
 
 func (s *CommandServer) notifyURLTestUpdate() {
@@ -188,6 +182,12 @@ func (s *CommandServer) handleConnection(conn net.Conn) error {
 		return s.handleGetSystemProxyStatus(conn)
 	case CommandSetSystemProxyEnabled:
 		return s.handleSetSystemProxyEnabled(conn)
+	case CommandConnections:
+		return s.handleConnectionsConn(conn)
+	case CommandCloseConnection:
+		return s.handleCloseConnection(conn)
+	case CommandGetDeprecatedNotes:
+		return s.handleGetDeprecatedNotes(conn)
 	default:
 		return E.New("unknown command: ", command)
 	}

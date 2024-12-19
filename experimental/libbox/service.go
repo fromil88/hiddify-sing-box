@@ -14,6 +14,7 @@ import (
 	"github.com/sagernet/sing-box/common/process"
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/experimental/libbox/internal/procfs"
 	"github.com/sagernet/sing-box/experimental/libbox/platform"
 	"github.com/sagernet/sing-box/log"
@@ -43,6 +44,12 @@ func NewService(configContent string, platformInterface PlatformInterface) (*Box
 	if err != nil {
 		return nil, err
 	}
+	runtimeDebug.FreeOSMemory()
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = filemanager.WithDefault(ctx, sWorkingPath, sTempPath, sUserID, sGroupID)
+	urlTestHistoryStorage := urltest.NewHistoryStorage()
+	ctx = service.ContextWithPtr(ctx, urlTestHistoryStorage)
+	ctx = service.ContextWith[deprecated.Manager](ctx, new(deprecatedManager))
 	platformWrapper := &platformInterfaceWrapper{iif: platformInterface, useProcFS: platformInterface.UseProcFS()}
 
 	return NewHService(box.Options{
@@ -130,12 +137,8 @@ func (w *platformInterfaceWrapper) UsePlatformAutoDetectInterfaceControl() bool 
 	return w.iif.UsePlatformAutoDetectInterfaceControl()
 }
 
-func (w *platformInterfaceWrapper) AutoDetectInterfaceControl() control.Func {
-	return func(network, address string, conn syscall.RawConn) error {
-		return control.Raw(conn, func(fd uintptr) error {
-			return w.iif.AutoDetectInterfaceControl(int32(fd))
-		})
-	}
+func (w *platformInterfaceWrapper) AutoDetectInterfaceControl(fd int) error {
+	return w.iif.AutoDetectInterfaceControl(int32(fd))
 }
 
 func (w *platformInterfaceWrapper) OpenTun(options *tun.Options, platformOptions option.TunPlatformOptions) (tun.Tun, error) {
@@ -163,33 +166,6 @@ func (w *platformInterfaceWrapper) OpenTun(options *tun.Options, platformOptions
 	}
 	options.FileDescriptor = dupFd
 	return tun.New(*options)
-}
-
-func (w *platformInterfaceWrapper) FindProcessInfo(ctx context.Context, network string, source netip.AddrPort, destination netip.AddrPort) (*process.Info, error) {
-	var uid int32
-	if w.useProcFS {
-		uid = procfs.ResolveSocketByProcSearch(network, source, destination)
-		if uid == -1 {
-			return nil, E.New("procfs: not found")
-		}
-	} else {
-		var ipProtocol int32
-		switch N.NetworkName(network) {
-		case N.NetworkTCP:
-			ipProtocol = syscall.IPPROTO_TCP
-		case N.NetworkUDP:
-			ipProtocol = syscall.IPPROTO_UDP
-		default:
-			return nil, E.New("unknown network: ", network)
-		}
-		var err error
-		uid, err = w.iif.FindConnectionOwner(ipProtocol, source.Addr().String(), int32(source.Port()), destination.Addr().String(), int32(destination.Port()))
-		if err != nil {
-			return nil, err
-		}
-	}
-	packageName, _ := w.iif.PackageNameByUid(uid)
-	return &process.Info{UserId: uid, PackageName: packageName}, nil
 }
 
 func (w *platformInterfaceWrapper) UsePlatformDefaultInterfaceMonitor() bool {
@@ -220,6 +196,7 @@ func (w *platformInterfaceWrapper) Interfaces() ([]control.Interface, error) {
 			MTU:       int(netInterface.MTU),
 			Name:      netInterface.Name,
 			Addresses: common.Map(iteratorToArray[string](netInterface.Addresses), netip.MustParsePrefix),
+			Flags:     linkFlags(uint32(netInterface.Flags)),
 		})
 	}
 	return interfaces, nil
@@ -245,10 +222,41 @@ func (w *platformInterfaceWrapper) ReadWIFIState() adapter.WIFIState {
 	return (adapter.WIFIState)(*wifiState)
 }
 
+func (w *platformInterfaceWrapper) FindProcessInfo(ctx context.Context, network string, source netip.AddrPort, destination netip.AddrPort) (*process.Info, error) {
+	var uid int32
+	if w.useProcFS {
+		uid = procfs.ResolveSocketByProcSearch(network, source, destination)
+		if uid == -1 {
+			return nil, E.New("procfs: not found")
+		}
+	} else {
+		var ipProtocol int32
+		switch N.NetworkName(network) {
+		case N.NetworkTCP:
+			ipProtocol = syscall.IPPROTO_TCP
+		case N.NetworkUDP:
+			ipProtocol = syscall.IPPROTO_UDP
+		default:
+			return nil, E.New("unknown network: ", network)
+		}
+		var err error
+		uid, err = w.iif.FindConnectionOwner(ipProtocol, source.Addr().String(), int32(source.Port()), destination.Addr().String(), int32(destination.Port()))
+		if err != nil {
+			return nil, err
+		}
+	}
+	packageName, _ := w.iif.PackageNameByUid(uid)
+	return &process.Info{UserId: uid, PackageName: packageName}, nil
+}
+
 func (w *platformInterfaceWrapper) DisableColors() bool {
 	return runtime.GOOS != "android"
 }
 
 func (w *platformInterfaceWrapper) WriteMessage(level log.Level, message string) {
 	w.iif.WriteLog(message)
+}
+
+func (w *platformInterfaceWrapper) SendNotification(notification *platform.Notification) error {
+	return w.iif.SendNotification((*Notification)(notification))
 }

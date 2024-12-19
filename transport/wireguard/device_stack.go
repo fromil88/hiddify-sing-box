@@ -263,12 +263,18 @@ func (ep *wireEndpoint) MTU() uint32 {
 	return ep.mtu
 }
 
+func (ep *wireEndpoint) SetMTU(mtu uint32) {
+}
+
 func (ep *wireEndpoint) MaxHeaderLength() uint16 {
 	return 0
 }
 
 func (ep *wireEndpoint) LinkAddress() tcpip.LinkAddress {
 	return ""
+}
+
+func (ep *wireEndpoint) SetLinkAddress(addr tcpip.LinkAddress) {
 }
 
 func (ep *wireEndpoint) Capabilities() stack.LinkEndpointCapabilities {
@@ -307,4 +313,10 @@ func (ep *wireEndpoint) WritePackets(list stack.PacketBufferList) (int, tcpip.Er
 		}
 	}
 	return list.Len(), nil
+}
+
+func (ep *wireEndpoint) Close() {
+}
+
+func (ep *wireEndpoint) SetOnCloseAction(f func()) {
 }

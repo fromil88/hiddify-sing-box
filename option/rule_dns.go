@@ -88,6 +88,7 @@ type DefaultDNSRule struct {
 	PortRange                Listable[string]       `json:"port_range,omitempty"`
 	ProcessName              Listable[string]       `json:"process_name,omitempty"`
 	ProcessPath              Listable[string]       `json:"process_path,omitempty"`
+	ProcessPathRegex         Listable[string]       `json:"process_path_regex,omitempty"`
 	PackageName              Listable[string]       `json:"package_name,omitempty"`
 	User                     Listable[string]       `json:"user,omitempty"`
 	UserID                   Listable[int32]        `json:"user_id,omitempty"`
@@ -96,15 +97,19 @@ type DefaultDNSRule struct {
 	WIFISSID                 Listable[string]       `json:"wifi_ssid,omitempty"`
 	WIFIBSSID                Listable[string]       `json:"wifi_bssid,omitempty"`
 	RuleSet                  Listable[string]       `json:"rule_set,omitempty"`
-	RuleSetIPCIDRMatchSource bool                   `json:"rule_set_ipcidr_match_source,omitempty"`
+	RuleSetIPCIDRMatchSource bool                   `json:"rule_set_ip_cidr_match_source,omitempty"`
+	RuleSetIPCIDRAcceptEmpty bool                   `json:"rule_set_ip_cidr_accept_empty,omitempty"`
 	Invert                   bool                   `json:"invert,omitempty"`
 	Server                   string                 `json:"server,omitempty"`
 	DisableCache             bool                   `json:"disable_cache,omitempty"`
 	RewriteTTL               *uint32                `json:"rewrite_ttl,omitempty"`
 	ClientSubnet             *AddrPrefix            `json:"client_subnet,omitempty"`
+
+	// Deprecated: renamed to rule_set_ip_cidr_match_source
+	Deprecated_RulesetIPCIDRMatchSource bool `json:"rule_set_ipcidr_match_source,omitempty"`
 }
 
-func (r DefaultDNSRule) IsValid() bool {
+func (r *DefaultDNSRule) IsValid() bool {
 	var defaultValue DefaultDNSRule
 	defaultValue.Invert = r.Invert
 	defaultValue.Server = r.Server
