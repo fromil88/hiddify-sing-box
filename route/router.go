@@ -408,7 +408,7 @@ func NewRouter(
 		if err == nil && addrs != nil && len(addrs) != 0 {
 			continue
 		}
-		ctx, metadata := adapter.AppendContext(ctx)
+		ctx, metadata := adapter.ExtendContext(ctx)
 		metadata.Domain = domain
 		ctx, dnstransport, _, _, _ := router.matchDNS(ctx, false, 0, true)
 

@@ -218,7 +218,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 		if strategy == dns.DomainStrategyAsIS {
 			strategy = transportStrategy
 		}
-		dnsCtx, cancel = context.WithTimeout(dnsCtx, C.DNSTimeout)
+		
 		responseAddrs, err = r.lookupStaticIP(domain, strategy)
 
 		if err == nil && responseAddrs != nil && len(responseAddrs) > 0 {

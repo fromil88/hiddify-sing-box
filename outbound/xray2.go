@@ -222,7 +222,7 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 }
 
 func (h *Xray2) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx, metadata := adapter.AppendContext(ctx)
+	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	var dest xnet.Destination
@@ -237,7 +237,7 @@ func (h *Xray2) DialContext(ctx context.Context, network string, destination M.S
 }
 
 func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	ctx, metadata := adapter.AppendContext(ctx)
+	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 
