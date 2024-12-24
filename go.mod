@@ -21,9 +21,7 @@ require (
 	github.com/miekg/dns v1.1.62
 	github.com/ooni/go-libtor v1.1.8
 	github.com/oschwald/maxminddb-golang v1.12.0
-	github.com/pion/logging v0.2.2
-	github.com/pion/turn/v3 v3.0.1
-	github.com/pires/go-proxyproto v0.8.0
+	github.com/sagernet/asc-go v0.0.0-20241217030726-d563060fe4e1
 	github.com/sagernet/bbolt v0.0.0-20231014093535-ea5cb2fe9f0a
 	github.com/sagernet/cloudflare-tls v0.0.0-20231208171750-a4483c1b7cd1
 	github.com/sagernet/cors v1.2.1
@@ -39,11 +37,11 @@ require (
 	github.com/sagernet/sing-shadowsocks v0.2.7
 	github.com/sagernet/sing-shadowsocks2 v0.2.0
 	github.com/sagernet/sing-shadowtls v0.1.5
-	github.com/sagernet/sing-tun v0.4.2
+	github.com/sagernet/sing-tun v0.4.5
 	github.com/sagernet/sing-vmess v0.1.12
 	github.com/sagernet/smux v0.0.0-20231208180855-7041f6ea79e7
 	github.com/sagernet/utls v1.6.7
-	github.com/sagernet/wireguard-go v0.0.0-20231215174105-89dec3b2f3e8
+	github.com/sagernet/wireguard-go v0.0.1-beta.5
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.10.0
@@ -65,13 +63,18 @@ require (
 require (
 	github.com/biter777/countries v1.7.5
 	github.com/imkira/go-observer/v2 v2.0.0-20230629064422-8e0b61f11f1b
+	github.com/pion/logging v0.2.2
+	github.com/pion/turn/v3 v3.0.3
+	github.com/pires/go-proxyproto v0.8.0
 	github.com/xtls/xray-core v0.0.0-00010101000000-000000000000
 )
 
 require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1 // indirect
 	github.com/dgryski/go-metro v0.0.0-20211217172704-adc40b04c140 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344 // indirect
@@ -81,6 +84,7 @@ require (
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20240528025155-186aa0362fba // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
@@ -99,7 +103,7 @@ require (
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/stun/v2 v2.0.0 // indirect
 	github.com/pion/transport/v2 v2.2.1 // indirect
-	github.com/pion/transport/v3 v3.0.1 // indirect
+	github.com/pion/transport/v3 v3.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/qtls-go1-20 v0.4.1 // indirect
