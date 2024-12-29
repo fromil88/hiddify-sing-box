@@ -18,9 +18,11 @@ import (
 	"github.com/xtls/xray-core/core"
 
 	// Mandatory features. Can't remove unless there are replacements.
+
 	_ "github.com/xtls/xray-core/app/dispatcher"
 	_ "github.com/xtls/xray-core/app/proxyman/inbound"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
+	_ "github.com/xtls/xray-core/common/errors"
 
 	// // Default commander and all its services. This is an optional feature.
 	// _ "github.com/xtls/xray-core/app/commander"
@@ -29,7 +31,7 @@ import (
 	// _ "github.com/xtls/xray-core/app/stats/command"
 
 	// // Developer preview services
-	// _ "github.com/xtls/xray-core/app/observatory/command"
+	_ "github.com/xtls/xray-core/app/observatory/command"
 
 	// Other optional features.
 	_ "github.com/xtls/xray-core/app/dns"
@@ -45,7 +47,7 @@ import (
 	// _ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
 
 	// // Developer preview features
-	// _ "github.com/xtls/xray-core/app/observatory"
+	_ "github.com/xtls/xray-core/app/observatory"
 
 	// Inbound and outbound proxies.
 	_ "github.com/xtls/xray-core/proxy/blackhole"
@@ -102,11 +104,10 @@ var _ adapter.Outbound = (*Xray2)(nil)
 
 type Xray2 struct {
 	myOutboundAdapter
-	resolve        bool
-	xrayInstance   *core.Instance
-	proxyStr       string
-	ctx            context.Context
-	xrayConfigJson []byte
+	resolve      bool
+	xrayInstance *core.Instance
+	proxyStr     string
+	xlogger      xlogInstance
 }
 
 func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray2, error) {
@@ -146,6 +147,7 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	xray := map[string]any{
 		"log": map[string]any{
 			"loglevel": options.LogLevel,
+			// "loglevel": "warn",
 		},
 		// "inbounds": []any{
 		// 	map[string]any{
@@ -174,20 +176,34 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	if err != nil {
 		fmt.Printf("Error marshaling to JSON: %v", err)
 	}
-	// fmt.Printf(string(jsonData))
+	fmt.Printf(string(jsonData))
+
+	// options.XrayOutboundJson
 	reader := bytes.NewReader(jsonData)
 
-	_, err = core.LoadConfig("json", reader)
+	xrayConfig, err := core.LoadConfig("json", reader)
+
+	// xrayConfig.App = append(xrayConfig.App, serial.ToTypedMessage(&dispatcher.Config{}))
 
 	if err != nil {
 		return nil, err
 	}
+	xlogger := xlogInstance{
+		singlogger: logger,
+		started:    false,
+	}
+	xlog.RegisterHandler(&xlogger)
+	server, err := core.NewWithContext(ctx, xrayConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	// socksNet := M.ParseSocksaddrHostPort("127.0.0.1", port)
 
 	// outboundDialer, err := dialer.New(router, options.DialerOptions)
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 	outbound := &Xray2{
 		myOutboundAdapter: myOutboundAdapter{
 			protocol:     C.TypeSOCKS,
@@ -199,10 +215,10 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		},
 		// client: socks.NewClient(outboundDialer, socksNet, socks.Version5, userpass, userpass),
 		// client:       socks.NewClient(outboundDialer, socksNet, socks.Version5, "", ""),
-		resolve:        false,
-		xrayConfigJson: jsonData,
-		ctx:            ctx,
-		proxyStr:       "X" + protocol,
+		resolve:      false,
+		xrayInstance: server,
+		xlogger:      xlogger,
+		proxyStr:     "X" + protocol,
 	}
 	// uotOptions := common.PtrValueOrDefault(options.UDPOverTCP)
 	// if uotOptions.Enabled {
@@ -211,7 +227,6 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	// 		Version: uotOptions.Version,
 	// 	}
 	// }
-
 	return outbound, nil
 }
 
@@ -267,32 +282,12 @@ func (h *Xray2) NewPacketConnection(ctx context.Context, conn N.PacketConn, meta
 	}
 }
 func (w *Xray2) Start() error {
-
-	xlog.RegisterHandler(&xlogInstance{
-		singlogger: w.logger,
-	})
-	// options.XrayOutboundJson
-	reader := bytes.NewReader(w.xrayConfigJson)
-
-	xrayConfig, err := core.LoadConfig("json", reader)
-
-	if err != nil {
-		return err
-	}
-
-	server, err := core.NewWithContext(w.ctx, xrayConfig)
-	if err != nil {
-		return err
-	}
-
-	w.xrayInstance = server
+	w.xlogger.started = true
 	return w.xrayInstance.Start()
 }
 func (w *Xray2) Close() error {
-	if w.xrayInstance != nil {
-		return w.xrayInstance.Close()
-	}
-	return nil
+	w.xlogger.started = false
+	return w.xrayInstance.Close()
 }
 
 func (w *Xray2) Type() string {
@@ -302,6 +297,7 @@ func (w *Xray2) Type() string {
 // xlogInstance is a log.Handler that handles logs.
 type xlogInstance struct {
 	singlogger log.Logger
+	started    bool
 }
 
 func (x *xlogInstance) Handle(msg xlog.Message) {
@@ -309,7 +305,12 @@ func (x *xlogInstance) Handle(msg xlog.Message) {
 		x.singlogger.Debug("no message")
 		return
 	}
+
 	msgstr := fmt.Sprint(msg)
+	if !x.started {
+		fmt.Println(msgstr)
+		return
+	}
 	switch msg := msg.(type) {
 	case *xlog.AccessMessage:
 		x.singlogger.Trace(msgstr)
