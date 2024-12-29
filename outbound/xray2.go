@@ -307,6 +307,11 @@ func (x *xlogInstance) Handle(msg xlog.Message) {
 	}
 
 	msgstr := fmt.Sprint(msg)
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(msgstr)
+		}
+	}()
 	if !x.started {
 		fmt.Println(msgstr)
 		return
