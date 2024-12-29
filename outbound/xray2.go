@@ -102,9 +102,11 @@ var _ adapter.Outbound = (*Xray2)(nil)
 
 type Xray2 struct {
 	myOutboundAdapter
-	resolve      bool
-	xrayInstance *core.Instance
-	proxyStr     string
+	resolve        bool
+	xrayInstance   *core.Instance
+	proxyStr       string
+	ctx            context.Context
+	xrayConfigJson []byte
 }
 
 func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray2, error) {
@@ -172,24 +174,14 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	if err != nil {
 		fmt.Printf("Error marshaling to JSON: %v", err)
 	}
-	fmt.Printf(string(jsonData))
-
-	// options.XrayOutboundJson
+	// fmt.Printf(string(jsonData))
 	reader := bytes.NewReader(jsonData)
 
-	xrayConfig, err := core.LoadConfig("json", reader)
+	_, err = core.LoadConfig("json", reader)
 
 	if err != nil {
 		return nil, err
 	}
-	server, err := core.NewWithContext(ctx, xrayConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	xlog.RegisterHandler(&xlogInstance{
-		singlogger: logger,
-	})
 	// socksNet := M.ParseSocksaddrHostPort("127.0.0.1", port)
 
 	// outboundDialer, err := dialer.New(router, options.DialerOptions)
@@ -207,9 +199,10 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		},
 		// client: socks.NewClient(outboundDialer, socksNet, socks.Version5, userpass, userpass),
 		// client:       socks.NewClient(outboundDialer, socksNet, socks.Version5, "", ""),
-		resolve:      false,
-		xrayInstance: server,
-		proxyStr:     "X" + protocol,
+		resolve:        false,
+		xrayConfigJson: jsonData,
+		ctx:            ctx,
+		proxyStr:       "X" + protocol,
 	}
 	// uotOptions := common.PtrValueOrDefault(options.UDPOverTCP)
 	// if uotOptions.Enabled {
@@ -218,6 +211,7 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	// 		Version: uotOptions.Version,
 	// 	}
 	// }
+
 	return outbound, nil
 }
 
@@ -273,6 +267,25 @@ func (h *Xray2) NewPacketConnection(ctx context.Context, conn N.PacketConn, meta
 	}
 }
 func (w *Xray2) Start() error {
+
+	xlog.RegisterHandler(&xlogInstance{
+		singlogger: w.logger,
+	})
+	// options.XrayOutboundJson
+	reader := bytes.NewReader(w.xrayConfigJson)
+
+	xrayConfig, err := core.LoadConfig("json", reader)
+
+	if err != nil {
+		return err
+	}
+
+	server, err := core.NewWithContext(w.ctx, xrayConfig)
+	if err != nil {
+		return err
+	}
+
+	w.xrayInstance = server
 	return w.xrayInstance.Start()
 }
 func (w *Xray2) Close() error {
@@ -289,24 +302,29 @@ type xlogInstance struct {
 }
 
 func (x *xlogInstance) Handle(msg xlog.Message) {
+	if msg == nil {
+		x.singlogger.Debug("no message")
+		return
+	}
+	msgstr := fmt.Sprint(msg)
 	switch msg := msg.(type) {
 	case *xlog.AccessMessage:
-		x.singlogger.Trace(msg.String())
+		x.singlogger.Trace(msgstr)
 	case *xlog.DNSLog:
-		x.singlogger.Trace(msg.String())
+		x.singlogger.Trace(msgstr)
 	case *xlog.GeneralMessage:
 		switch msg.Severity {
 		case xlog.Severity_Debug:
-			x.singlogger.Debug(msg.String())
+			x.singlogger.Debug(msgstr)
 		case xlog.Severity_Info:
-			x.singlogger.Info(msg.String())
+			x.singlogger.Info(msgstr)
 		case xlog.Severity_Warning:
-			x.singlogger.Warn(msg.String())
+			x.singlogger.Warn(msgstr)
 		case xlog.Severity_Error:
-			x.singlogger.Error(msg.String())
+			x.singlogger.Error(msgstr)
 		}
 	default:
-		x.singlogger.Debug(msg.String())
+		x.singlogger.Debug(msgstr)
 	}
 }
 

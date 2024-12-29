@@ -1399,7 +1399,8 @@ func (r *Router) doSortOutboundsByDependencies() {
 
 	var appendOutbounds func(out adapter.Outbound)
 	appendOutbounds = func(out adapter.Outbound) {
-		if started[out.Tag()] {
+
+		if out == nil || started[out.Tag()] {
 			return
 		}
 
