@@ -409,12 +409,13 @@ func (g *URLTestGroup) URLTest(ctx context.Context) (map[string]uint16, error) {
 func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint16, error) {
 	result := make(map[string]uint16)
 	if t := g.selectedOutboundTCP; t != nil {
-		go g.urltestImp(t, false)
+		go g.urltestImp(t, false, nil)
 	}
 	if g.checking.Swap(true) {
 		return result, nil
 	}
 	defer g.checking.Store(false)
+	ipbatch, _ := batch.New(ctx, batch.WithConcurrencyNum[string](10))
 	b, _ := batch.New(ctx, batch.WithConcurrencyNum[any](10))
 	checked := make(map[string]bool)
 	var resultAccess sync.Mutex
@@ -434,7 +435,7 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			continue
 		}
 		b.Go(realTag, func() (any, error) {
-			t := g.urltestImp(p, false)
+			t := g.urltestImp(p, false, ipbatch)
 			resultAccess.Lock()
 			result[tag] = t
 			g.performUpdateCheck()
@@ -443,11 +444,11 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 		})
 	}
 	b.Wait()
-
+	ipbatch.Wait()
 	g.performUpdateCheck()
-	if g.hasOneAvailableOutbound() {
-		g.fetchUnknownOutboundsIpInfo()
-	} else {
+	if !g.hasOneAvailableOutbound() {
+		// 	// g.fetchUnknownOutboundsIpInfo()
+		// } else {
 		g.currentLinkIndex = (g.currentLinkIndex + 1) % len(g.links)
 		if g.currentLinkIndex != 0 {
 			g.urlTest(ctx, force)
@@ -459,8 +460,8 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 func (g *URLTestGroup) ForceRecheckOutbound(outboundTag string) error {
 	for _, detour := range g.outbounds {
 		if detour.Tag() == outboundTag {
-			g.urltestImp(detour, false)
-			g.checkHistoryIp(detour)
+			g.urltestImp(detour, false, nil)
+			// g.checkHistoryIp(detour)
 			return nil
 		}
 	}
@@ -482,7 +483,7 @@ func (g *URLTestGroup) hasOneAvailableOutbound() bool {
 	g.logger.Debug("no available outbound ")
 	return false
 }
-func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbound bool) uint16 {
+func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbound bool, ipbatch *batch.Batch[string]) uint16 {
 	realTag := RealTag(outbound)
 	testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
 	defer cancel()
@@ -494,10 +495,21 @@ func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbo
 	} else {
 		g.logger.Debug("outbound ", realTag, " available: ", t, "ms")
 	}
-	g.history.StoreURLTestHistory(realTag, &urltest.History{
+	history := g.history.StoreURLTestHistory(realTag, &urltest.History{
 		Time:  time.Now(),
 		Delay: t,
 	})
+	if t != TimeoutDelay {
+		if ipbatch == nil {
+			go g.checkHistoryIp(outbound)
+		} else if history.IpInfo == nil {
+			ipbatch.Go(realTag+"ip", func() (string, error) {
+				g.checkHistoryIp(outbound)
+				return "", nil
+			})
+		}
+	}
+
 	if update_active_outbound {
 		g.performUpdateCheck()
 	}

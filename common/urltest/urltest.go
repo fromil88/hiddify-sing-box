@@ -66,7 +66,7 @@ func (s *HistoryStorage) DeleteURLTestHistory(tag string) {
 	s.notifyUpdated()
 }
 
-func (s *HistoryStorage) StoreURLTestHistory(tag string, history *History) {
+func (s *HistoryStorage) StoreURLTestHistory(tag string, history *History) *History {
 	s.access.Lock()
 	if old, ok := s.delayHistory[tag]; ok && history != nil {
 		old.Delay = history.Delay
@@ -77,9 +77,10 @@ func (s *HistoryStorage) StoreURLTestHistory(tag string, history *History) {
 	} else {
 		s.delayHistory[tag] = history
 	}
-
+	history = s.delayHistory[tag]
 	s.access.Unlock()
 	s.notifyUpdated()
+	return history
 }
 
 func (s *HistoryStorage) AddOnlyIpToHistory(tag string, history *History) {
