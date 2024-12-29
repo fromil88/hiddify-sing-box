@@ -289,7 +289,10 @@ func (w *Xray2) Start() error {
 	return w.xrayInstance.Start()
 }
 func (w *Xray2) Close() error {
-	return w.xrayInstance.Close()
+	if w.xrayInstance != nil {
+		return w.xrayInstance.Close()
+	}
+	return nil
 }
 
 func (w *Xray2) Type() string {
