@@ -22,6 +22,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
 )
@@ -72,6 +73,7 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 	if len(outbound.tags) == 0 {
 		return nil, E.New("missing tags")
 	}
+
 	return outbound, nil
 }
 
@@ -108,9 +110,11 @@ func (s *URLTest) PostStart() error {
 }
 
 func (s *URLTest) Close() error {
+
 	return common.Close(
 		common.PtrOrNil(s.group),
 	)
+
 }
 
 func (s *URLTest) Now() string {
@@ -219,6 +223,10 @@ func (s *URLTest) NewPacketConnection(ctx context.Context, conn N.PacketConn, me
 }
 
 func (s *URLTest) InterfaceUpdated() {
+	if s.group.pauseManager.IsNetworkPaused() {
+		s.logger.Error("Hiddify! Network is paused!... returning")
+		return
+	}
 	go s.group.CheckOutbounds(true)
 	return
 }
@@ -235,6 +243,7 @@ type URLTestGroup struct {
 	history                      *urltest.HistoryStorage
 	checking                     atomic.Bool
 	pauseManager                 pause.Manager
+	pauseCallback                *list.Element[pause.Callback]
 	selectedOutboundTCP          adapter.Outbound
 	selectedOutboundUDP          adapter.Outbound
 	interruptGroup               *interrupt.Group
@@ -299,10 +308,22 @@ func NewURLTestGroup(
 	}, nil
 }
 
+func (g *URLTestGroup) onPauseUpdated(event int) {
+	switch event {
+	case pause.EventDevicePaused:
+	case pause.EventNetworkPause: //hiddify already handled in Interface Updated
+	case pause.EventDeviceWake:
+		go g.CheckOutbounds(false)
+	case pause.EventNetworkWake: //hiddify already handled in Interface Updated
+		go g.CheckOutbounds(false)
+	}
+}
 func (g *URLTestGroup) PostStart() {
 	g.started = true
 	g.lastActive.Store(time.Now())
 	go g.CheckOutbounds(false)
+	g.pauseCallback = g.pauseManager.RegisterCallback(g.onPauseUpdated)
+
 }
 
 func (g *URLTestGroup) Touch() {
@@ -323,6 +344,9 @@ func (g *URLTestGroup) Touch() {
 }
 
 func (g *URLTestGroup) Close() error {
+	if g.pauseCallback != nil {
+		g.pauseManager.UnregisterCallback(g.pauseCallback)
+	}
 	if g.ticker == nil {
 		return nil
 	}
