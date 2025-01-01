@@ -27,8 +27,10 @@ import (
 	"github.com/sagernet/sing/service/pause"
 )
 
-const TimeoutDelay = 65535
-const MinFailureToReset = 15
+const (
+	TimeoutDelay      = 65535
+	MinFailureToReset = 15
+)
 
 var (
 	_ adapter.Outbound                = (*URLTest)(nil)
@@ -110,11 +112,9 @@ func (s *URLTest) PostStart() error {
 }
 
 func (s *URLTest) Close() error {
-
 	return common.Close(
 		common.PtrOrNil(s.group),
 	)
-
 }
 
 func (s *URLTest) Now() string {
@@ -311,19 +311,19 @@ func NewURLTestGroup(
 func (g *URLTestGroup) onPauseUpdated(event int) {
 	switch event {
 	case pause.EventDevicePaused:
-	case pause.EventNetworkPause: //hiddify already handled in Interface Updated
+	case pause.EventNetworkPause: // hiddify already handled in Interface Updated
 	case pause.EventDeviceWake:
 		go g.CheckOutbounds(false)
-	case pause.EventNetworkWake: //hiddify already handled in Interface Updated
+	case pause.EventNetworkWake: // hiddify already handled in Interface Updated
 		go g.CheckOutbounds(false)
 	}
 }
+
 func (g *URLTestGroup) PostStart() {
 	g.started = true
 	g.lastActive.Store(time.Now())
 	go g.CheckOutbounds(false)
 	g.pauseCallback = g.pauseManager.RegisterCallback(g.onPauseUpdated)
-
 }
 
 func (g *URLTestGroup) Touch() {
@@ -491,6 +491,7 @@ func (g *URLTestGroup) ForceRecheckOutbound(outboundTag string) error {
 	}
 	return fmt.Errorf("Outbound not found")
 }
+
 func (g *URLTestGroup) hasOneAvailableOutbound() bool {
 	for _, detour := range g.outbounds {
 		if !common.Contains(detour.Network(), "tcp") {
@@ -507,11 +508,19 @@ func (g *URLTestGroup) hasOneAvailableOutbound() bool {
 	g.logger.Debug("no available outbound ")
 	return false
 }
+
 func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbound bool, ipbatch *batch.Batch[string]) uint16 {
 	realTag := RealTag(outbound)
 	testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
 	defer cancel()
 	t, err := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], outbound)
+	if outbound.Type() == C.TypeWireGuard { // double check for wireguard
+		t1, err1 := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], outbound)
+		if err1 == nil {
+			t = t1
+			err = err1
+		}
+	}
 	if err != nil {
 		g.logger.Debug("outbound ", realTag, " unavailable (", TimeoutDelay, "ms): ", err)
 		// g.history.DeleteURLTestHistory(realTag)
@@ -539,6 +548,7 @@ func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbo
 	}
 	return t
 }
+
 func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 	if outbound == nil {
 		return
@@ -573,8 +583,8 @@ func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
 		Delay:  t,
 		IpInfo: newip,
 	})
-
 }
+
 func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -686,6 +696,7 @@ func (m *MinZeroAtomicInt64) Reset() int64 {
 	m.count = 0
 	return m.count
 }
+
 func (m *MinZeroAtomicInt64) IncrementConditionReset(condition int64) bool {
 	m.access.Lock()
 	defer m.access.Unlock()

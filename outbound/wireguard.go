@@ -74,7 +74,7 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		ctx:          ctx,
 		workers:      options.Workers,
 		pauseManager: service.FromContext[pause.Manager](ctx),
-		hforwarder:   hforwarder, //hiddify
+		hforwarder:   hforwarder, // hiddify
 	}
 	outbound.fakePackets = []int{0, 0}
 	outbound.fakePacketsSize = []int{0, 0}
@@ -153,38 +153,22 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 }
 
 func (w *WireGuard) Start() error {
-	// Retry up to 10 times to check peer endpoints
-	err := w.waitForEndpointStart(20)
-	if err != nil {
-		return nil
+	if common.Any(w.peers, func(peer wireguard.PeerConfig) bool {
+		return !peer.Endpoint.IsValid()
+	}) {
+		return nil // start in post start
 	}
+
 	// Proceed with starting WireGuard
 	return w.start()
 }
-func (w *WireGuard) waitForEndpointStart(count int) error {
-	for i := 0; i < 20; i++ {
-		if !common.Any(w.peers, func(peer wireguard.PeerConfig) bool {
-			return !peer.Endpoint.IsValid()
-		}) {
-			return nil
-		}
-		// If we reach the 10th attempt, exit early
-
-		<-time.After(100 * time.Millisecond) // Wait for 100ms before retrying
-	}
-	return fmt.Errorf("Timeout")
-}
 
 func (w *WireGuard) PostStart() error {
-	err := w.waitForEndpointStart(1)
-	if err == nil { //all endpoints are already started
+	if common.All(w.peers, func(peer wireguard.PeerConfig) bool {
+		return peer.Endpoint.IsValid()
+	}) {
 		return nil
 	}
-	// if common.All(w.peers, func(peer wireguard.PeerConfig) bool {
-	// 	return peer.Endpoint.IsValid()
-	// }) {
-	// 	return nil
-	// }
 	return w.start()
 }
 
@@ -277,9 +261,9 @@ func (w *WireGuard) start() error {
 }
 
 func (w *WireGuard) Close() error {
-	if w.hforwarder != nil { //hiddify
-		w.hforwarder.Close() //hiddify
-	} //hiddify
+	if w.hforwarder != nil { // hiddify
+		w.hforwarder.Close() // hiddify
+	} // hiddify
 	if w.device != nil {
 		w.device.Close()
 	}
@@ -351,13 +335,13 @@ func (w *WireGuard) onPauseUpdated(event int) {
 
 	case pause.EventDevicePaused:
 		w.device.Down()
-	case pause.EventNetworkPause: //hiddify already handled in Interface Updated
+	case pause.EventNetworkPause: // hiddify already handled in Interface Updated
 		err := w.device.Down()
 		w.logger.Info("Hiddify! Wirguard! downing net! err=", err)
 		<-time.After(50 * time.Millisecond)
 	case pause.EventDeviceWake:
 		w.device.Up()
-	case pause.EventNetworkWake: //hiddify already handled in Interface Updated
+	case pause.EventNetworkWake: // hiddify already handled in Interface Updated
 		err := w.device.Up()
 		w.logger.Info("Hiddify! Wirguard! Uping net! err=", err)
 		<-time.After(50 * time.Millisecond)
