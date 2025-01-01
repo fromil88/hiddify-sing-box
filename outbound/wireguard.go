@@ -153,21 +153,38 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 }
 
 func (w *WireGuard) Start() error {
-	if common.Any(w.peers, func(peer wireguard.PeerConfig) bool {
-		return !peer.Endpoint.IsValid()
-	}) {
-		// wait for all outbounds to be started and continue in PortStart
+	// Retry up to 10 times to check peer endpoints
+	err := w.waitForEndpointStart(20)
+	if err != nil {
 		return nil
 	}
+	// Proceed with starting WireGuard
 	return w.start()
+}
+func (w *WireGuard) waitForEndpointStart(count int) error {
+	for i := 0; i < 20; i++ {
+		if !common.Any(w.peers, func(peer wireguard.PeerConfig) bool {
+			return !peer.Endpoint.IsValid()
+		}) {
+			return nil
+		}
+		// If we reach the 10th attempt, exit early
+
+		<-time.After(100 * time.Millisecond) // Wait for 100ms before retrying
+	}
+	return fmt.Errorf("Timeout")
 }
 
 func (w *WireGuard) PostStart() error {
-	if common.All(w.peers, func(peer wireguard.PeerConfig) bool {
-		return peer.Endpoint.IsValid()
-	}) {
+	err := w.waitForEndpointStart(1)
+	if err == nil { //all endpoints are already started
 		return nil
 	}
+	// if common.All(w.peers, func(peer wireguard.PeerConfig) bool {
+	// 	return peer.Endpoint.IsValid()
+	// }) {
+	// 	return nil
+	// }
 	return w.start()
 }
 
