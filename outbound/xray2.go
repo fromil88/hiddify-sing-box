@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
@@ -111,17 +112,28 @@ type Xray2 struct {
 }
 
 func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray2, error) {
-
 	outbounds := []map[string]any{}
+	selectedIff := router.DefaultInterface()
+	for _, iff := range router.InterfaceFinder().Interfaces() {
+		if !strings.Contains(iff.Name, "tun") {
+			selectedIff = iff.Name
+			break
+		}
+	}
+
 	if options.XrayOutboundJson != nil {
+
 		xrayconf := *options.XrayOutboundJson
 		if options.Fragment == nil || options.Fragment.Packets == "" {
-			xrayconf["sockopt"] = map[string]any{}
+			xrayconf["sockopt"] = map[string]any{
+				"interface": selectedIff,
+			}
 		} else {
 			xrayconf["sockopt"] = map[string]any{
 				"dialerProxy":      "fragment",
 				"tcpKeepAliveIdle": 100,
 				"tcpNoDelay":       true,
+				"interface":        selectedIff,
 			}
 		}
 		outbounds = append(outbounds, xrayconf)
@@ -148,6 +160,13 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		"log": map[string]any{
 			"loglevel": options.LogLevel,
 			// "loglevel": "warn",
+		},
+		"dns": map[string]any{
+			"servers": []any{
+				"1.1.1.1",
+				"8.8.8.8",
+				"223.5.5.5",
+			},
 		},
 		// "inbounds": []any{
 		// 	map[string]any{
@@ -176,15 +195,13 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	if err != nil {
 		fmt.Printf("Error marshaling to JSON: %v", err)
 	}
-	fmt.Printf(string(jsonData))
+	// fmt.Printf(string(jsonData))
 
 	// options.XrayOutboundJson
 	reader := bytes.NewReader(jsonData)
 
 	xrayConfig, err := core.LoadConfig("json", reader)
-
 	// xrayConfig.App = append(xrayConfig.App, serial.ToTypedMessage(&dispatcher.Config{}))
-
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +232,7 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		},
 		// client: socks.NewClient(outboundDialer, socksNet, socks.Version5, userpass, userpass),
 		// client:       socks.NewClient(outboundDialer, socksNet, socks.Version5, "", ""),
-		resolve:      false,
+		resolve:      true,
 		xrayInstance: server,
 		xlogger:      xlogger,
 		proxyStr:     "X" + protocol,
@@ -234,6 +251,13 @@ func (h *Xray2) DialContext(ctx context.Context, network string, destination M.S
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
+	if h.resolve && destination.IsFqdn() {
+		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
+		if err != nil {
+			return nil, err
+		}
+		return N.DialSerial(ctx, h, network, destination, destinationAddresses)
+	}
 	var dest xnet.Destination
 	switch N.NetworkName(network) {
 	case N.NetworkTCP:
@@ -242,7 +266,6 @@ func (h *Xray2) DialContext(ctx context.Context, network string, destination M.S
 		dest = xnet.UDPDestination(xnet.ParseAddress(destination.AddrString()), xnet.Port(destination.Port))
 	}
 	return core.Dial(ctx, h.xrayInstance, dest)
-
 }
 
 func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
@@ -250,20 +273,19 @@ func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 
-	// if h.resolve && destination.IsFqdn() {
-	// 	destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	packetConn, _, err := N.ListenSerial(ctx, c, destination, destinationAddresses)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	return packetConn, nil
-	// }
+	if h.resolve && destination.IsFqdn() {
+		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
+		if err != nil {
+			return nil, err
+		}
+		packetConn, _, err := N.ListenSerial(ctx, h, destination, destinationAddresses)
+		if err != nil {
+			return nil, err
+		}
+		return packetConn, nil
+	}
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	return core.DialUDP(ctx, h.xrayInstance)
-
 }
 
 func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
@@ -281,10 +303,12 @@ func (h *Xray2) NewPacketConnection(ctx context.Context, conn N.PacketConn, meta
 		return NewPacketConnection(ctx, h, conn, metadata)
 	}
 }
+
 func (w *Xray2) Start() error {
 	w.xlogger.started = true
 	return w.xrayInstance.Start()
 }
+
 func (w *Xray2) Close() error {
 	w.xlogger.started = false
 	return w.xrayInstance.Close()
@@ -306,7 +330,7 @@ func (x *xlogInstance) Handle(msg xlog.Message) {
 		return
 	}
 
-	msgstr := fmt.Sprint(msg)
+	msgstr := fmt.Sprint("X:", msg)
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println(msgstr)
