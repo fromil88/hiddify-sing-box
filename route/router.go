@@ -3,7 +3,6 @@ package route
 import (
 	"context"
 	"errors"
-
 	"net"
 	"net/netip"
 	"net/url"
@@ -54,8 +53,8 @@ import (
 var _ adapter.Router = (*Router)(nil)
 
 type Router struct {
-	sortedOutboundsByDependenciesHiddify []adapter.Outbound        //hiddify
-	staticDns                            map[string]StaticDNSEntry //Hiddify
+	sortedOutboundsByDependenciesHiddify []adapter.Outbound        // hiddify
+	staticDns                            map[string]StaticDNSEntry // Hiddify
 	ctx                                  context.Context
 	logger                               log.ContextLogger
 	dnsLogger                            log.ContextLogger
@@ -141,8 +140,9 @@ func NewRouter(
 		needPackageManager: common.Any(inbounds, func(inbound option.Inbound) bool {
 			return len(inbound.TunOptions.IncludePackage) > 0 || len(inbound.TunOptions.ExcludePackage) > 0
 		}),
-		staticDns: createEntries(dnsOptions.StaticIPs), //hiddify
+		staticDns: createEntries(dnsOptions.StaticIPs), // hiddify
 	}
+
 	router.dnsClient = dns.NewClient(dns.ClientOptions{
 		DisableCache:     dnsOptions.DNSClientOptions.DisableCache,
 		DisableExpire:    dnsOptions.DNSClientOptions.DisableExpire,
@@ -276,7 +276,6 @@ func NewRouter(
 				if checkDNSLoopDomainName != "" {
 					checkDNSLoopDomain[checkDNSLoopDomainName] = transport.Name()
 				}
-
 			}
 			transports[i] = transport
 			dummyTransportMap[tag] = transport
@@ -1391,15 +1390,15 @@ func (r *Router) updateWIFIState() {
 	}
 }
 
-func (r *Router) SortedOutboundsByDependenciesHiddify() []adapter.Outbound { //hiddify
+func (r *Router) SortedOutboundsByDependenciesHiddify() []adapter.Outbound { // hiddify
 	return r.sortedOutboundsByDependenciesHiddify
 }
+
 func (r *Router) doSortOutboundsByDependencies() {
 	started := make(map[string]bool)
 
 	var appendOutbounds func(out adapter.Outbound)
 	appendOutbounds = func(out adapter.Outbound) {
-
 		if out == nil || started[out.Tag()] {
 			return
 		}
@@ -1430,5 +1429,4 @@ func (r *Router) notifyWindowsPowerEvent(event int) {
 		r.pauseManager.DeviceWake()
 		_ = r.ResetNetwork()
 	}
-
 }

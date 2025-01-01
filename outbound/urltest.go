@@ -171,16 +171,16 @@ func (s *URLTest) DialContext(ctx context.Context, network string, destination M
 
 	if !s.group.checking.Load() && !s.group.pauseManager.IsNetworkPaused() && s.group.tcpConnectionFailureCount.IncrementConditionReset(MinFailureToReset) {
 		s.logger.Warn("TCP URLTest Outbound ", s.tag, " (", outboundToString(s.group.selectedOutboundTCP), ") failed to connect for ", MinFailureToReset, " times==> test proxies again!")
+		s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
+			Time:  time.Now(),
+			Delay: TimeoutDelay,
+		})
 		s.group.selectedOutboundTCP = nil
 		s.CheckOutbounds()
 	}
 
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
-		Time:  time.Now(),
-		Delay: TimeoutDelay,
-	})
-	// s.group.history.DeleteURLTestHistory(outbound.Tag())
+
 	return nil, err
 }
 
@@ -200,15 +200,15 @@ func (s *URLTest) ListenPacket(ctx context.Context, destination M.Socksaddr) (ne
 	}
 	if !s.group.checking.Load() && !s.group.pauseManager.IsNetworkPaused() && s.group.udpConnectionFailureCount.IncrementConditionReset(MinFailureToReset) {
 		s.logger.Info("Hiddify! UDP URLTest Outbound ", s.tag, " (", outboundToString(s.group.selectedOutboundUDP), ") failed to connect for ", MinFailureToReset, " times==> test proxies again!")
+
+		s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
+			Time:  time.Now(),
+			Delay: TimeoutDelay,
+		})
 		s.group.selectedOutboundUDP = nil
 		s.CheckOutbounds()
 	}
 	s.logger.ErrorContext(ctx, err)
-	s.group.history.StoreURLTestHistory(outbound.Tag(), &urltest.History{
-		Time:  time.Now(),
-		Delay: TimeoutDelay,
-	})
-	// s.group.history.DeleteURLTestHistory(outbound.Tag())
 	return nil, err
 }
 
