@@ -82,6 +82,7 @@ type utlsConnWrapper struct {
 
 func (c *utlsConnWrapper) ConnectionState() tls.ConnectionState {
 	state := c.Conn.ConnectionState()
+	//nolint:staticcheck
 	return tls.ConnectionState{
 		Version:                     state.Version,
 		HandshakeComplete:           state.HandshakeComplete,
