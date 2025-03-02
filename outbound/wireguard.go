@@ -132,6 +132,9 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		if err != nil {
 			return nil, E.Cause(err, "decode private key")
 		}
+		if len(bytes) != 32 {
+			return nil, E.New("invalid private key", options.PrivateKey)
+		}
 		privateKey = hex.EncodeToString(bytes)
 	}
 	outbound.ipcConf = "private_key=" + privateKey
