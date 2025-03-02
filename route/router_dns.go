@@ -218,8 +218,8 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 		if strategy == dns.DomainStrategyAsIS {
 			strategy = transportStrategy
 		}
-		
-		responseAddrs, err = r.lookupStaticIP(domain, strategy)
+
+		responseAddrs, err = r.staticDns.lookupStaticIP(domain, strategy, true)
 
 		if err == nil && responseAddrs != nil && len(responseAddrs) > 0 {
 			r.dnsLogger.DebugContext(ctx, "Static IP responsefor ", domain, " ", responseAddrs[0])
@@ -257,12 +257,20 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 
 	if len(responseAddrs) > 0 {
 		r.dnsLogger.InfoContext(ctx, "lookup succeed for ", domain, ": ", strings.Join(F.MapToString(responseAddrs), " "))
+		r.staticDns.Add2staticDnsIfInternal(domain, responseAddrs)
 	} else if err != nil {
 		r.dnsLogger.ErrorContext(ctx, E.Cause(err, "lookup failed for ", domain))
 	} else {
 		r.dnsLogger.ErrorContext(ctx, "lookup failed for ", domain, ": empty result")
 		err = dns.RCodeNameError
-
+	}
+	if len(responseAddrs) == 0 && r.staticDns.IsInternal(domain) { // check again for lookup also for intenal domains
+		var err1 error
+		responseAddrs, err1 = r.staticDns.lookupStaticIP(domain, strategy, false)
+		if err1 == nil && len(responseAddrs) > 0 {
+			r.dnsLogger.InfoContext(ctx, "Static IP Internal response for ", domain, " ", responseAddrs[0])
+			err = err1
+		}
 	}
 	return responseAddrs, err
 }

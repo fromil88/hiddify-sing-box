@@ -53,8 +53,8 @@ import (
 var _ adapter.Router = (*Router)(nil)
 
 type Router struct {
-	sortedOutboundsByDependenciesHiddify []adapter.Outbound        // hiddify
-	staticDns                            map[string]StaticDNSEntry // Hiddify
+	sortedOutboundsByDependenciesHiddify []adapter.Outbound // hiddify
+	staticDns                            *StaticDNS         // Hiddify
 	ctx                                  context.Context
 	logger                               log.ContextLogger
 	dnsLogger                            log.ContextLogger
@@ -140,7 +140,6 @@ func NewRouter(
 		needPackageManager: common.Any(inbounds, func(inbound option.Inbound) bool {
 			return len(inbound.TunOptions.IncludePackage) > 0 || len(inbound.TunOptions.ExcludePackage) > 0
 		}),
-		staticDns: createEntries(dnsOptions.StaticIPs), // hiddify
 	}
 
 	router.dnsClient = dns.NewClient(dns.ClientOptions{
@@ -358,6 +357,9 @@ func NewRouter(
 				return nil, err
 			}
 			router.networkMonitor = networkMonitor
+			networkMonitor.RegisterCallback(func() {
+				_ = router.interfaceFinder.Update()
+			})
 			interfaceMonitor, err := tun.NewDefaultInterfaceMonitor(router.networkMonitor, router.logger, tun.DefaultInterfaceMonitorOptions{
 				InterfaceFinder:       router.interfaceFinder,
 				OverrideAndroidVPN:    options.OverrideAndroidVPN,
@@ -398,9 +400,9 @@ func NewRouter(
 		service.MustRegister[ntp.TimeService](ctx, timeService)
 		router.timeService = timeService
 	}
-
+	router.staticDns = NewStaticDNS(router, dnsOptions.StaticIPs) // hiddify
 	for domain, tag := range checkDNSLoopDomain {
-		addrs, err := router.lookupStaticIP(domain, dns.DomainStrategyAsIS)
+		addrs, err := router.staticDns.lookupStaticIP(domain, dns.DomainStrategyAsIS, true)
 		if err == nil && addrs != nil && len(addrs) != 0 {
 			continue
 		}

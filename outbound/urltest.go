@@ -79,6 +79,10 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 	return outbound, nil
 }
 
+func (s *URLTest) Links() []string {
+	return s.links
+}
+
 func (s *URLTest) Start() error {
 	outbounds := make([]adapter.Outbound, 0, len(s.tags))
 	for i, tag := range s.tags {
