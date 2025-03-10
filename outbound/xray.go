@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -143,17 +144,19 @@ func contains(slice []string, item string) bool {
 }
 
 func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray2, error) {
-	defConfig, err := readXrayConfig(defaultXrayConfig)
+	var defConfig map[string]any
+	err := json.Unmarshal([]byte(defaultXrayConfig), &defConfig)
 	if err != nil {
 		return nil, err
 	}
+
 	// xrayConfig, err := readXrayConfig(options.XConfig)
 	// if err != nil {
 	// 	return nil, err
 
 	// }
 
-	xrayConfig := options.XConfig
+	xrayConfig := *options.XConfig
 	// defConfig := xrayConfig
 	selectedIff := router.DefaultInterface()
 	for _, iff := range router.InterfaceFinder().Interfaces() {
@@ -163,47 +166,73 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		}
 	}
 
-	xrayConfig.InboundConfigs = []conf.InboundDetourConfig{}
+	xrayConfig["inbounds"] = nil
 	if options.XDebug {
-		xrayConfig.LogConfig = &conf.LogConfig{
+		xrayConfig["log"] = &conf.LogConfig{
 			LogLevel: "debug",
 			DNSLog:   true,
 		}
 	} else {
-		xrayConfig.LogConfig = &conf.LogConfig{
+		xrayConfig["log"] = &conf.LogConfig{
 			LogLevel: "info",
 			DNSLog:   false,
 		}
 	}
 
-	for _, out := range xrayConfig.OutboundConfigs {
-		if out.StreamSetting == nil {
-			out.StreamSetting = &conf.StreamConfig{}
+	if outbounds, ok := xrayConfig["outbounds"].([]interface{}); ok {
+		for _, item := range outbounds {
+			if out, ok := item.(map[string]any); ok {
+				if out["streamSettings"] == nil {
+					out["streamSettings"] = map[string]any{}
+				}
+
+				streamSettings, _ := out["streamSettings"].(map[string]any) // Ensure it's a map
+				if streamSettings["sockopt"] == nil {
+					streamSettings["sockopt"] = map[string]any{}
+				}
+
+				sockopt, _ := streamSettings["sockopt"].(map[string]any) // Ensure it's a map
+				sockopt["interface"] = selectedIff
+
+				// Update back
+				streamSettings["sockopt"] = sockopt
+				out["streamSettings"] = streamSettings
+			}
 		}
-		if out.StreamSetting.SocketSettings == nil {
-			out.StreamSetting.SocketSettings = &conf.SocketConfig{}
-		}
-		out.StreamSetting.SocketSettings.Interface = selectedIff
+	}
+	if xrayConfig["dns"] == nil {
+		xrayConfig["dns"] = defConfig["dns"]
 	}
 
-	if xrayConfig.DNSConfig == nil {
-		xrayConfig.DNSConfig = defConfig.DNSConfig
+	dnsConfig, _ := xrayConfig["dns"].(map[string]any) // Safe type assertion
+
+	if dnsConfig["tag"] == nil || dnsConfig["tag"] == "" {
+		dnsConfig["tag"] = "hiddify-dns-out"
 	}
 
-	if xrayConfig.DNSConfig.Tag == "" {
-		xrayConfig.DNSConfig.Tag = "hiddify-dns-out"
+	if servers, ok := dnsConfig["servers"].([]interface{}); !ok || len(servers) == 0 {
+		dnsConfig["servers"] = defConfig["dns"].(map[string]any)["servers"]
 	}
 
-	if len(xrayConfig.DNSConfig.Servers) == 0 {
-		xrayConfig.DNSConfig.Servers = defConfig.DNSConfig.Servers
-	}
 	protocol := "XRay"
-	for _, out := range xrayConfig.OutboundConfigs {
-		protocol = out.Protocol
-		if contains(mainProtocols, out.Protocol) {
-			break
+
+	if outbounds, ok := xrayConfig["outbounds"].([]interface{}); ok {
+		for _, item := range outbounds {
+			if out, ok := item.(map[string]any); ok {
+				if proto, exists := out["protocol"].(string); exists {
+					protocol = proto
+					if contains(mainProtocols, proto) { // Use proto, not out.Protocol
+						break
+					}
+				}
+			}
 		}
 	}
+	jsonData, err := json.MarshalIndent(xrayConfig, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling to JSON: %v", err)
+	}
+
 	// fmt.Printf(string(jsonData))
 
 	xlogger := xlogInstance{
@@ -211,8 +240,10 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		started:    false,
 	}
 	xlog.RegisterHandler(&xlogger)
-	xConfigBuild, err := xrayConfig.Build()
-	server, err := core.NewWithContext(ctx, xConfigBuild)
+	reader := bytes.NewReader(jsonData)
+
+	xrayFinalConfig, err := core.LoadConfig("json", reader)
+	server, err := core.NewWithContext(ctx, xrayFinalConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -285,17 +316,18 @@ func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
-
-	if h.resolve && destination.IsFqdn() {
-		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
-		if err != nil {
-			return nil, err
+	if destination.Port != 53 {
+		if h.resolve && destination.IsFqdn() {
+			destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
+			if err != nil {
+				return nil, err
+			}
+			packetConn, _, err := N.ListenSerial(ctx, h, destination, destinationAddresses)
+			if err != nil {
+				return nil, err
+			}
+			return packetConn, nil
 		}
-		packetConn, _, err := N.ListenSerial(ctx, h, destination, destinationAddresses)
-		if err != nil {
-			return nil, err
-		}
-		return packetConn, nil
 	}
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	return core.DialUDP(ctx, h.xrayInstance)
