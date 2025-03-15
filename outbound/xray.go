@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -144,11 +145,11 @@ func contains(slice []string, item string) bool {
 }
 
 func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray2, error) {
-	var defConfig map[string]any
-	err := json.Unmarshal([]byte(defaultXrayConfig), &defConfig)
-	if err != nil {
-		return nil, err
-	}
+	// var defConfig map[string]any
+	// err := json.Unmarshal([]byte(defaultXrayConfig), &defConfig)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// xrayConfig, err := readXrayConfig(options.XConfig)
 	// if err != nil {
@@ -156,7 +157,13 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 
 	// }
 
+	if options.XConfig == nil {
+		return nil, errors.New("xray config is nil")
+	}
 	xrayConfig := *options.XConfig
+	if outbounds, exists := xrayConfig["outbounds"]; !exists || outbounds == nil {
+		xrayConfig = map[string]any{"outbounds": []map[string]any{xrayConfig}}
+	}
 	// defConfig := xrayConfig
 	selectedIff := router.DefaultInterface()
 	for _, iff := range router.InterfaceFinder().Interfaces() {
@@ -200,19 +207,28 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 			}
 		}
 	}
-	if xrayConfig["dns"] == nil {
-		xrayConfig["dns"] = defConfig["dns"]
-	}
+	hasDnsHandler := false
 
-	dnsConfig, _ := xrayConfig["dns"].(map[string]any) // Safe type assertion
-
-	if dnsConfig["tag"] == nil || dnsConfig["tag"] == "" {
-		dnsConfig["tag"] = "hiddify-dns-out"
+	if dns, ok := xrayConfig["dns"].(map[string]interface{}); ok {
+		if tag, exists := dns["tag"]; exists {
+			if tagStr, ok := tag.(string); ok && len(tagStr) > 0 {
+				hasDnsHandler = true
+			}
+		}
 	}
+	// {
+	// 	xrayConfig["dns"] = defConfig["dns"]
+	// }
 
-	if servers, ok := dnsConfig["servers"].([]interface{}); !ok || len(servers) == 0 {
-		dnsConfig["servers"] = defConfig["dns"].(map[string]any)["servers"]
-	}
+	// dnsConfig, _ := xrayConfig["dns"].(map[string]any) // Safe type assertion
+
+	// if dnsConfig["tag"] == nil || dnsConfig["tag"] == "" {
+	// 	dnsConfig["tag"] = "hiddify-dns-out"
+	// }
+
+	// if servers, ok := dnsConfig["servers"].([]interface{}); !ok || len(servers) == 0 {
+	// 	dnsConfig["servers"] = defConfig["dns"].(map[string]any)["servers"]
+	// }
 
 	protocol := "XRay"
 
@@ -233,17 +249,17 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		fmt.Printf("Error marshaling to JSON: %v", err)
 	}
 
-	// fmt.Printf(string(jsonData))
+	fmt.Printf(string(jsonData))
 
 	xlogger := xlogInstance{
 		singlogger: logger,
 		started:    false,
 	}
-	xlog.RegisterHandler(&xlogger)
 	reader := bytes.NewReader(jsonData)
 
 	xrayFinalConfig, err := core.LoadConfig("json", reader)
 	server, err := core.NewWithContext(ctx, xrayFinalConfig)
+	xlog.RegisterHandler(&xlogger)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +281,7 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		},
 		// client: socks.NewClient(outboundDialer, socksNet, socks.Version5, userpass, userpass),
 		// client:       socks.NewClient(outboundDialer, socksNet, socks.Version5, "", ""),
-		resolve:      true,
+		resolve:      !hasDnsHandler,
 		xrayInstance: server,
 		xlogger:      xlogger,
 		proxyStr:     "X" + protocol,
@@ -280,11 +296,22 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	return outbound, nil
 }
 
+func readXrayConfig(jsonData string) (*conf.Config, error) {
+	// options.XrayOutboundJson
+
+	xrayConfig := conf.Config{}
+	err := json.Unmarshal([]byte(jsonData), &xrayConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &xrayConfig, nil
+}
+
 func (h *Xray2) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
-	if h.resolve && destination.IsFqdn() {
+	if false && h.resolve && destination.IsFqdn() {
 		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
 		if err != nil {
 			return nil, err
@@ -301,40 +328,29 @@ func (h *Xray2) DialContext(ctx context.Context, network string, destination M.S
 	return core.Dial(ctx, h.xrayInstance, dest)
 }
 
-func readXrayConfig(jsonData string) (*conf.Config, error) {
-	// options.XrayOutboundJson
-
-	xrayConfig := conf.Config{}
-	err := json.Unmarshal([]byte(jsonData), &xrayConfig)
-	if err != nil {
-		return nil, err
-	}
-	return &xrayConfig, nil
-}
-
 func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
-	if destination.Port != 53 {
-		if h.resolve && destination.IsFqdn() {
-			destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
-			if err != nil {
-				return nil, err
-			}
-			packetConn, _, err := N.ListenSerial(ctx, h, destination, destinationAddresses)
-			if err != nil {
-				return nil, err
-			}
-			return packetConn, nil
+
+	if false && h.resolve && destination.IsFqdn() {
+		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
+		if err != nil {
+			return nil, err
 		}
+		packetConn, _, err := N.ListenSerial(ctx, h, destination, destinationAddresses)
+		if err != nil {
+			return nil, err
+		}
+		return packetConn, nil
 	}
+
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
 	return core.DialUDP(ctx, h.xrayInstance)
 }
 
 func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
-	if h.resolve {
+	if false && h.resolve {
 		return NewDirectConnection(ctx, h.router, h, conn, metadata, dns.DomainStrategyUseIPv4)
 	} else {
 		return NewConnection(ctx, h, conn, metadata)
@@ -342,7 +358,7 @@ func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapt
 }
 
 func (h *Xray2) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
-	if h.resolve {
+	if false && h.resolve {
 		return NewDirectPacketConnection(ctx, h.router, h, conn, metadata, dns.DomainStrategyUseIPv4)
 	} else {
 		return NewPacketConnection(ctx, h, conn, metadata)
