@@ -1,6 +1,7 @@
 package libbox
 
 import (
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
 
@@ -34,12 +35,23 @@ type InterfaceUpdateListener interface {
 	UpdateDefaultInterface(interfaceName string, interfaceIndex int32)
 }
 
+const (
+	InterfaceTypeWIFI     = int32(C.InterfaceTypeWIFI)
+	InterfaceTypeCellular = int32(C.InterfaceTypeCellular)
+	InterfaceTypeEthernet = int32(C.InterfaceTypeEthernet)
+	InterfaceTypeOther    = int32(C.InterfaceTypeOther)
+)
+
 type NetworkInterface struct {
 	Index     int32
 	MTU       int32
 	Name      string
 	Addresses StringIterator
 	Flags     int32
+
+	Type      int32
+	DNSServer StringIterator
+	Metered   bool
 }
 
 type WIFIState struct {
