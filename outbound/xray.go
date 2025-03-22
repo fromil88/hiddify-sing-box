@@ -308,10 +308,16 @@ func readXrayConfig(jsonData string) (*conf.Config, error) {
 }
 
 func (h *Xray2) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			h.logger.ErrorContext(ctx, "Xray2 panic: ", r)
+		}
+	}()
+
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
-	if false && h.resolve && destination.IsFqdn() {
+	if h.resolve && destination.IsFqdn() {
 		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
 		if err != nil {
 			return nil, err
@@ -329,11 +335,16 @@ func (h *Xray2) DialContext(ctx context.Context, network string, destination M.S
 }
 
 func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			h.logger.ErrorContext(ctx, "Xray2 udp panic: ", r)
+		}
+	}()
 	ctx, metadata := adapter.ExtendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 
-	if false && h.resolve && destination.IsFqdn() {
+	if h.resolve && destination.IsFqdn() {
 		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
 		if err != nil {
 			return nil, err
@@ -350,7 +361,7 @@ func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.
 }
 
 func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
-	if false && h.resolve {
+	if h.resolve {
 		return NewDirectConnection(ctx, h.router, h, conn, metadata, dns.DomainStrategyUseIPv4)
 	} else {
 		return NewConnection(ctx, h, conn, metadata)
@@ -358,7 +369,7 @@ func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapt
 }
 
 func (h *Xray2) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
-	if false && h.resolve {
+	if h.resolve {
 		return NewDirectPacketConnection(ctx, h.router, h, conn, metadata, dns.DomainStrategyUseIPv4)
 	} else {
 		return NewPacketConnection(ctx, h, conn, metadata)
