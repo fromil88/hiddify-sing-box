@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/hiddify/ipinfo"
 	"github.com/sagernet/sing-box/common/interrupt"
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
@@ -452,10 +451,10 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 
 func (g *URLTestGroup) urlTestEx(ctx context.Context, force bool, force_check_even_previous_not_completed bool) (map[string]uint16, error) {
 	if t := g.selectedOutboundTCP; t != nil {
-		go g.urltestImp(t, false, nil)
+		go g.urltestImp(t, nil)
 	}
 	if t := g.selectedOutboundUDP; t != nil && t != g.selectedOutboundTCP {
-		go g.urltestImp(t, false, nil)
+		go g.urltestImp(t, nil)
 	}
 	result := make(map[string]uint16)
 	if g.checking.Swap(true) {
@@ -489,7 +488,7 @@ func (g *URLTestGroup) urlTestEx(ctx context.Context, force bool, force_check_ev
 			continue
 		}
 		b.Go(realTag, func() (any, error) {
-			t := g.urltestImp(p, false, ipbatch)
+			t := g.urltestImp(p, ipbatch)
 			resultAccess.Lock()
 			result[tag] = t
 			g.performOutboundUpdateCheck(detour)
@@ -514,7 +513,7 @@ func (g *URLTestGroup) urlTestEx(ctx context.Context, force bool, force_check_ev
 func (g *URLTestGroup) ForceRecheckOutbound(outboundTag string) error {
 	for _, detour := range g.outbounds {
 		if detour.Tag() == outboundTag {
-			g.urltestImp(detour, false, nil)
+			g.urltestImp(detour, nil)
 			// g.checkHistoryIp(detour)
 			return nil
 		}
@@ -539,85 +538,19 @@ func (g *URLTestGroup) hasOneAvailableOutbound() bool {
 	return false
 }
 
-func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, update_active_outbound bool, ipbatch *batch.Batch[string]) uint16 {
-	realTag := RealTag(outbound)
-	testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
-	defer cancel()
-	t, err := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], outbound)
-	if outbound.Type() == C.TypeWireGuard { // double check for wireguard
-		t1, err1 := urltest.URLTest(testCtx, g.links[g.currentLinkIndex], outbound)
-		if err1 == nil {
-			t = t1
-			err = err1
-		}
-	}
-	if err != nil {
-		g.logger.Debug("outbound ", realTag, " unavailable (", TimeoutDelay, "ms): ", err)
-		// g.history.DeleteURLTestHistory(realTag)
-		t = TimeoutDelay
-	} else {
-		g.logger.Debug("outbound ", realTag, " available: ", t, "ms")
-	}
-	history := g.history.StoreURLTestHistory(realTag, &urltest.History{
-		Time:  time.Now(),
-		Delay: t,
-	})
-	if update_active_outbound {
-		g.performOutboundUpdateCheck(outbound)
-	}
-	if t != TimeoutDelay {
-		if ipbatch == nil {
-			go g.checkHistoryIp(outbound)
-		} else if history.IpInfo == nil {
-			ipbatch.Go(realTag+"ip", func() (string, error) {
-				g.checkHistoryIp(outbound)
-				return "", nil
-			})
-		}
-	}
-
-	return t
+func (g *URLTestGroup) urltestImp(outbound adapter.Outbound, ipbatch *batch.Batch[string]) uint16 {
+	return CheckOutbound(g.logger, g.ctx, g.history, g.router, g.links[g.currentLinkIndex], outbound, ipbatch)
 }
 
-func (g *URLTestGroup) checkHistoryIp(outbound adapter.Outbound) {
-	if outbound == nil {
-		return
-	}
+func (g *URLTestGroup) isOutboundTimeout(outbound adapter.Outbound) bool {
 	realTag := RealTag(outbound)
-	detour, loaded := g.router.Outbound(realTag)
-	if !loaded {
-		g.logger.Debug("checkHistoryIp ", outbound.Tag(), " not loaded")
-		return
-	}
+
 	if g.history == nil {
 		g.logger.Debug("g.history  is null")
-		return
+		return true
 	}
 	his := g.history.LoadURLTestHistory(realTag)
-	if his == nil {
-		g.logger.Debug("history  is null")
-		return
-	}
-	if his.IpInfo != nil {
-		g.logger.Debug("ip already calculated ", fmt.Sprint(his.IpInfo))
-		return
-	}
-	newip, t, err := ipinfo.GetIpInfo(g.logger, g.ctx, detour)
-	if err != nil {
-		g.logger.Debug("outbound ", realTag, " IP unavailable (", t, "ms): ", err)
-		// g.history.AddOnlyIpToHistory(realTag, &urltest.History{
-		// 	Time:   time.Now(),
-		// 	Delay:  TimeoutDelay,
-		// 	IpInfo: &ipinfo.IpInfo{},
-		// })
-		return
-	}
-	g.logger.Trace("outbound ", realTag, " IP ", fmt.Sprint(newip), " (", t, "ms): ", err)
-	g.history.AddOnlyIpToHistory(realTag, &urltest.History{
-		Time:   time.Now(),
-		Delay:  t,
-		IpInfo: newip,
-	})
+	return isTimeout(his)
 }
 
 // func (g *URLTestGroup) fetchUnknownOutboundsIpInfo() {
@@ -690,7 +623,7 @@ func (g *URLTestGroup) forceUpdateOutbound(tcp adapter.Outbound, udp adapter.Out
 	if tcp != nil && g.selectedOutboundTCP != tcp {
 		g.selectedOutboundTCP = tcp
 		g.tcpConnectionFailureCount.Reset()
-		go g.checkHistoryIp(g.selectedOutboundTCP)
+		// go g.checkHistoryIp(g.selectedOutboundTCP)
 		update = true
 
 	}
@@ -796,6 +729,9 @@ func (m *MinZeroAtomicInt64) Get(useMutex bool) int64 {
 }
 
 func (m *MinZeroAtomicInt64) Reset() int64 {
+	if m.count == 0 {
+		return 0
+	}
 	m.access.Lock()
 	defer m.access.Unlock()
 	m.count = 0

@@ -121,8 +121,8 @@ func New(options Options) (*Box, error) {
 		}
 		inbounds = append(inbounds, in)
 	}
-	var lastErr error      //hiddify
-	var lastErrDesc string //hiddify
+	var lastErr error      // hiddify
+	var lastErrDesc string // hiddify
 	for i, outboundOptions := range options.Outbounds {
 		var out adapter.Outbound
 		var tag string
@@ -138,22 +138,22 @@ func New(options Options) (*Box, error) {
 			tag,
 			outboundOptions)
 		if err != nil {
-			lastErrDesc = fmt.Sprintf("parse outbound[%d] error: %+v", i, err) //hiddify
+			lastErrDesc = fmt.Sprintf("parse outbound[%d] error: %+v", i, err) // hiddify
 			fmt.Println(lastErrDesc)
-			lastErr = err //hiddify
+			lastErr = err // hiddify
 			out = outbound.NewInvalidConfig(
 				logFactory.NewLogger(F.ToString("outbound/", outboundOptions.Type, "[", tag, "]")),
 				tag,
-				err) //hiddify
+				err) // hiddify
 		}
 
 		outbounds = append(outbounds, out)
 	}
-	if len(outbounds) == 0 && lastErr != nil { //hiddify
-		return nil, E.Cause(lastErr, lastErrDesc) //hiddify
-	} //hiddify
+	if len(outbounds) == 0 && lastErr != nil { // hiddify
+		return nil, E.Cause(lastErr, lastErrDesc) // hiddify
+	} // hiddify
 
-	//hiddify initalization of router moved to preStart
+	// hiddify initalization of router moved to preStart
 
 	if options.PlatformInterface != nil {
 		err = options.PlatformInterface.Initialize(ctx, router)
@@ -425,6 +425,7 @@ func (s *Box) Router() adapter.Router {
 func (s *Box) AddPreService(name string, service adapter.Service) {
 	s.preServices2[name] = service
 }
+
 func (s *Box) AddPostService(name string, service adapter.Service) {
 	s.postServices[name] = service
 }
@@ -432,6 +433,11 @@ func (s *Box) AddPostService(name string, service adapter.Service) {
 func (s *Box) AddInbound(inb adapter.Inbound) {
 	s.inbounds = append(s.inbounds, inb)
 }
+
 func (s *Box) AddOutbound(out adapter.Outbound) {
 	s.outbounds = append(s.outbounds, out)
+}
+
+func (s *Box) GetLogger() log.ContextLogger {
+	return s.logger
 }
