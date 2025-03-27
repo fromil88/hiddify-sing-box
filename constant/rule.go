@@ -11,9 +11,15 @@ const (
 )
 
 const (
+	RuleSetTypeInline   = "inline"
 	RuleSetTypeLocal    = "local"
 	RuleSetTypeRemote   = "remote"
-	RuleSetVersion1     = 1
 	RuleSetFormatSource = "source"
 	RuleSetFormatBinary = "binary"
+)
+
+const (
+	RuleSetVersion1 = 1 + iota
+	RuleSetVersion2
+	RuleSetVersionCurrent = RuleSetVersion2
 )

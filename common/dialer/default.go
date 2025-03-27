@@ -50,12 +50,26 @@ func NewDefault(router adapter.Router, options option.DialerOptions) (*DefaultDi
 		dialer.Control = control.Append(dialer.Control, bindFunc)
 		listener.Control = control.Append(listener.Control, bindFunc)
 	}
-	if options.RoutingMark != 0 {
+	var autoRedirectOutputMark uint32
+	if router != nil {
+		autoRedirectOutputMark = router.AutoRedirectOutputMark()
+	}
+	if autoRedirectOutputMark > 0 {
+		dialer.Control = control.Append(dialer.Control, control.RoutingMark(autoRedirectOutputMark))
+		listener.Control = control.Append(listener.Control, control.RoutingMark(autoRedirectOutputMark))
+	}
+	if options.RoutingMark > 0 {
 		dialer.Control = control.Append(dialer.Control, control.RoutingMark(options.RoutingMark))
 		listener.Control = control.Append(listener.Control, control.RoutingMark(options.RoutingMark))
-	} else if router != nil && router.DefaultMark() != 0 {
+		if autoRedirectOutputMark > 0 {
+			return nil, E.New("`auto_redirect` with `route_[_exclude]_address_set is conflict with `routing_mark`")
+		}
+	} else if router != nil && router.DefaultMark() > 0 {
 		dialer.Control = control.Append(dialer.Control, control.RoutingMark(router.DefaultMark()))
 		listener.Control = control.Append(listener.Control, control.RoutingMark(router.DefaultMark()))
+		if autoRedirectOutputMark > 0 {
+			return nil, E.New("`auto_redirect` with `route_[_exclude]_address_set is conflict with `default_mark`")
+		}
 	}
 	if options.ReuseAddr {
 		listener.Control = control.Append(listener.Control, control.ReuseAddr())
@@ -67,11 +81,37 @@ func NewDefault(router adapter.Router, options option.DialerOptions) (*DefaultDi
 	if options.ConnectTimeout != 0 {
 		dialer.Timeout = time.Duration(options.ConnectTimeout)
 	} else {
-		dialer.Timeout = C.TCPTimeout
+		dialer.Timeout = C.TCPConnectTimeout
 	}
 	// TODO: Add an option to customize the keep alive period
 	dialer.KeepAlive = C.TCPKeepAliveInitial
 	dialer.Control = control.Append(dialer.Control, control.SetKeepAlivePeriod(C.TCPKeepAliveInitial, C.TCPKeepAliveInterval))
+	if options.TLSFragment.Enabled && options.TCPFastOpen {
+		return nil, E.New("TLS Fragmentation is not compatible with TCP Fast Open, set `tcp_fast_open` to `false` in your outbound if you intend to enable TLS fragmentation.")
+	}
+	var tlsFragment TLSFragment
+	if options.TLSFragment.Enabled {
+		tlsFragment.Enabled = true
+
+		sleep, err := option.Parse2IntRange(options.TLSFragment.Sleep)
+		if err != nil {
+			return nil, E.Cause(err, "missing or invalid value supplied as TLS fragment `sleep` option")
+		}
+		if sleep.Max > 1000 {
+			return nil, E.New("invalid range supplied as TLS fragment `sleep` option! set to '0' to disable sleeps or set to range [0,1000]")
+		}
+		tlsFragment.Sleep = sleep
+
+		size, err := option.Parse2IntRange(options.TLSFragment.Size)
+		if err != nil {
+			return nil, E.Cause(err, "missing or invalid value supplied as TLS fragment `size` option")
+		}
+		if size.Min <= 0 || size.Max > 256 {
+			return nil, E.New("invalid range supplied as TLS fragment `size` option! valid range: [1,256]")
+		}
+		tlsFragment.Size = size
+
+	}
 	var udpFragment bool
 	if options.UDPFragment != nil {
 		udpFragment = *options.UDPFragment
@@ -109,29 +149,6 @@ func NewDefault(router adapter.Router, options option.DialerOptions) (*DefaultDi
 			return nil, E.New("MultiPath TCP requires go1.21, please recompile your binary.")
 		}
 		setMultiPathTCP(&dialer4)
-	}
-
-	var tlsFragment *TLSFragment = nil
-	if options.TLSFragment != nil && options.TLSFragment.Enabled {
-		tlsFragment = &TLSFragment{}
-		if options.TCPFastOpen {
-			return nil, E.New("TLS Fragmentation is not compatible with TCP Fast Open, set `tcp_fast_open` to `false` in your outbound if you intend to enable TLS fragmentation.")
-		}
-		tlsFragment.Enabled = true
-
-		sleep, err := option.Parse2IntRange(options.TLSFragment.Sleep)
-
-		if err != nil {
-			return nil, E.Cause(err, "invalid TLS fragment sleep period supplied")
-		}
-		tlsFragment.Sleep = sleep
-
-		size, err := option.Parse2IntRange(options.TLSFragment.Size)
-		if err != nil {
-			return nil, E.Cause(err, "invalid TLS fragment size supplied")
-		}
-		tlsFragment.Size = size
-
 	}
 	if options.IsWireGuardListener {
 		for _, controlFn := range wgControlFns {
@@ -188,7 +205,7 @@ func (d *DefaultDialer) ListenPacket(ctx context.Context, destination M.Socksadd
 }
 
 func (d *DefaultDialer) ListenPacketCompat(network, address string) (net.PacketConn, error) {
-	return trackPacketConn(d.udpListener.ListenPacket(context.Background(), network, address))
+	return d.udpListener.ListenPacket(context.Background(), network, address)
 }
 
 func trackConn(conn net.Conn, err error) (net.Conn, error) {

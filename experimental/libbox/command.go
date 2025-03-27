@@ -15,5 +15,8 @@ const (
 	CommandGetSystemProxyStatus
 	CommandSetSystemProxyEnabled
 
-	CommandGroupInfoOnly//hiddify
+	CommandConnections
+	CommandCloseConnection
+	CommandGetDeprecatedNotes
+	CommandGroupInfoOnly //hiddify
 )

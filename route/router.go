@@ -3,7 +3,6 @@ package route
 import (
 	"context"
 	"errors"
-
 	"net"
 	"net/netip"
 	"net/url"
@@ -11,6 +10,7 @@ import (
 	"os/user"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -53,12 +53,13 @@ import (
 var _ adapter.Router = (*Router)(nil)
 
 type Router struct {
+	sortedOutboundsByDependenciesHiddify []adapter.Outbound // hiddify
+	staticDns                            *StaticDNS         // Hiddify
 	ctx                                  context.Context
 	logger                               log.ContextLogger
 	dnsLogger                            log.ContextLogger
 	inboundByTag                         map[string]adapter.Inbound
 	outbounds                            []adapter.Outbound
-	sortedOutboundsByDependenciesHiddify []adapter.Outbound //hiddify
 	outboundByTag                        map[string]adapter.Outbound
 	rules                                []adapter.Rule
 	defaultDetour                        string
@@ -73,7 +74,6 @@ type Router struct {
 	geositeCache                         map[string]adapter.Rule
 	needFindProcess                      bool
 	dnsClient                            *dns.Client
-	staticDns                            map[string]StaticDNSEntry //Hiddify
 	defaultDomainStrategy                dns.DomainStrategy
 	dnsRules                             []adapter.DNSRule
 	ruleSets                             []adapter.RuleSet
@@ -87,7 +87,8 @@ type Router struct {
 	interfaceFinder                      *control.DefaultInterfaceFinder
 	autoDetectInterface                  bool
 	defaultInterface                     string
-	defaultMark                          int
+	defaultMark                          uint32
+	autoRedirectOutputMark               uint32
 	networkMonitor                       tun.NetworkUpdateMonitor
 	interfaceMonitor                     tun.DefaultInterfaceMonitor
 	packageManager                       tun.PackageManager
@@ -139,8 +140,8 @@ func NewRouter(
 		needPackageManager: common.Any(inbounds, func(inbound option.Inbound) bool {
 			return len(inbound.TunOptions.IncludePackage) > 0 || len(inbound.TunOptions.ExcludePackage) > 0
 		}),
-		staticDns: createEntries(dnsOptions.StaticIPs), //hiddify
 	}
+
 	router.dnsClient = dns.NewClient(dns.ClientOptions{
 		DisableCache:     dnsOptions.DNSClientOptions.DisableCache,
 		DisableExpire:    dnsOptions.DNSClientOptions.DisableExpire,
@@ -158,14 +159,14 @@ func NewRouter(
 		Logger: router.dnsLogger,
 	})
 	for i, ruleOptions := range options.Rules {
-		routeRule, err := NewRule(router, router.logger, ruleOptions, true)
+		routeRule, err := NewRule(ctx, router, router.logger, ruleOptions, true)
 		if err != nil {
 			return nil, E.Cause(err, "parse rule[", i, "]")
 		}
 		router.rules = append(router.rules, routeRule)
 	}
 	for i, dnsRuleOptions := range dnsOptions.Rules {
-		dnsRule, err := NewDNSRule(router, router.logger, dnsRuleOptions, true)
+		dnsRule, err := NewDNSRule(ctx, router, router.logger, dnsRuleOptions, true)
 		if err != nil {
 			return nil, E.Cause(err, "parse dns rule[", i, "]")
 		}
@@ -218,12 +219,19 @@ func NewRouter(
 				detour = dialer.NewDetour(router, server.Detour)
 			}
 			checkDNSLoopDomainName := ""
+			var serverProtocol string
 			switch server.Address {
 			case "local":
+				serverProtocol = "local"
 			default:
 				serverURL, _ := url.Parse(server.Address)
 				var serverAddress string
 				if serverURL != nil {
+					if serverURL.Scheme == "" {
+						serverProtocol = "udp"
+					} else {
+						serverProtocol = serverURL.Scheme
+					}
 					serverAddress = serverURL.Hostname()
 				}
 				if serverAddress == "" {
@@ -250,9 +258,12 @@ func NewRouter(
 			} else if dnsOptions.ClientSubnet != nil {
 				clientSubnet = dnsOptions.ClientSubnet.Build()
 			}
+			if serverProtocol == "" {
+				serverProtocol = "transport"
+			}
 			transport, err := dns.CreateTransport(dns.TransportOptions{
 				Context:      ctx,
-				Logger:       logFactory.NewLogger(F.ToString("dns/transport[", tag, "]")),
+				Logger:       logFactory.NewLogger(F.ToString("dns/", serverProtocol, "[", tag, "]")),
 				Name:         tag,
 				Dialer:       detour,
 				Address:      server.Address,
@@ -264,7 +275,6 @@ func NewRouter(
 				if checkDNSLoopDomainName != "" {
 					checkDNSLoopDomain[checkDNSLoopDomainName] = transport.Name()
 				}
-
 			}
 			transports[i] = transport
 			dummyTransportMap[tag] = transport
@@ -351,6 +361,7 @@ func NewRouter(
 				_ = router.interfaceFinder.Update()
 			})
 			interfaceMonitor, err := tun.NewDefaultInterfaceMonitor(router.networkMonitor, router.logger, tun.DefaultInterfaceMonitorOptions{
+				InterfaceFinder:       router.interfaceFinder,
 				OverrideAndroidVPN:    options.OverrideAndroidVPN,
 				UnderNetworkExtension: platformInterface != nil && platformInterface.UnderNetworkExtension(),
 			})
@@ -389,15 +400,15 @@ func NewRouter(
 		service.MustRegister[ntp.TimeService](ctx, timeService)
 		router.timeService = timeService
 	}
-
+	router.staticDns = NewStaticDNS(router, dnsOptions.StaticIPs) // hiddify
 	for domain, tag := range checkDNSLoopDomain {
-		addrs, err := router.lookupStaticIP(domain, dns.DomainStrategyAsIS)
+		addrs, err := router.staticDns.lookupStaticIP(domain, dns.DomainStrategyAsIS, true)
 		if err == nil && addrs != nil && len(addrs) != 0 {
 			continue
 		}
-		ctx, metadata := adapter.AppendContext(ctx)
+		ctx, metadata := adapter.ExtendContext(ctx)
 		metadata.Domain = domain
-		ctx, dnstransport, _, _, _ := router.matchDNS(ctx, false, 0,true)
+		ctx, dnstransport, _, _, _ := router.matchDNS(ctx, false, 0, true)
 
 		if dnstransport != nil && dnstransport.Name() == tag {
 			return nil, E.New("Dns Loop Detected[", tag, "]")
@@ -569,7 +580,10 @@ func (r *Router) Start() error {
 
 	if C.IsAndroid && r.platformInterface == nil {
 		monitor.Start("initialize package manager")
-		packageManager, err := tun.NewPackageManager(r)
+		packageManager, err := tun.NewPackageManager(tun.PackageManagerOptions{
+			Callback: r,
+			Logger:   r.logger,
+		})
 		monitor.Finish()
 		if err != nil {
 			return E.Cause(err, "create package manager")
@@ -690,14 +704,15 @@ func (r *Router) Close() error {
 
 func (r *Router) PostStart() error {
 	monitor := taskmonitor.New(r.logger, C.StopTimeout)
+	var cacheContext *adapter.HTTPStartContext
 	if len(r.ruleSets) > 0 {
 		monitor.Start("initialize rule-set")
-		ruleSetStartContext := NewRuleSetStartContext()
+		cacheContext = adapter.NewHTTPStartContext()
 		var ruleSetStartGroup task.Group
 		for i, ruleSet := range r.ruleSets {
 			ruleSetInPlace := ruleSet
 			ruleSetStartGroup.Append0(func(ctx context.Context) error {
-				err := ruleSetInPlace.StartContext(ctx, ruleSetStartContext)
+				err := ruleSetInPlace.StartContext(ctx, cacheContext)
 				if err != nil {
 					return E.Cause(err, "initialize rule-set[", i, "]")
 				}
@@ -711,7 +726,9 @@ func (r *Router) PostStart() error {
 		if err != nil {
 			return err
 		}
-		ruleSetStartContext.Close()
+	}
+	if cacheContext != nil {
+		cacheContext.Close()
 	}
 	needFindProcess := r.needFindProcess
 	needWIFIState := r.needWIFIState
@@ -772,7 +789,23 @@ func (r *Router) PostStart() error {
 			return E.Cause(err, "initialize rule[", i, "]")
 		}
 	}
+	for _, ruleSet := range r.ruleSets {
+		monitor.Start("post start rule_set[", ruleSet.Name(), "]")
+		err := ruleSet.PostStart()
+		monitor.Finish()
+		if err != nil {
+			return E.Cause(err, "post start rule_set[", ruleSet.Name(), "]")
+		}
+	}
 	r.started = true
+	return nil
+}
+
+func (r *Router) Cleanup() error {
+	for _, ruleSet := range r.ruleSetMap {
+		ruleSet.Cleanup()
+	}
+	runtime.GC()
 	return nil
 }
 
@@ -868,12 +901,21 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 		conn = deadline.NewConn(conn)
 	}
 
-	if metadata.InboundOptions.SniffEnabled {
+	if metadata.InboundOptions.SniffEnabled && !sniff.Skip(metadata) {
 		buffer := buf.NewPacket()
-		sniffMetadata, err := sniff.PeekStream(ctx, conn, buffer, time.Duration(metadata.InboundOptions.SniffTimeout), sniff.StreamDomainNameQuery, sniff.TLSClientHello, sniff.HTTPHost)
-		if sniffMetadata != nil {
-			metadata.Protocol = sniffMetadata.Protocol
-			metadata.Domain = sniffMetadata.Domain
+		err := sniff.PeekStream(
+			ctx,
+			&metadata,
+			conn,
+			buffer,
+			time.Duration(metadata.InboundOptions.SniffTimeout),
+			sniff.TLSClientHello,
+			sniff.HTTPHost,
+			sniff.StreamDomainNameQuery,
+			sniff.SSH,
+			sniff.BitTorrent,
+		)
+		if err == nil {
 			if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
 				metadata.Destination = M.Socksaddr{
 					Fqdn: metadata.Domain,
@@ -885,8 +927,6 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 			} else {
 				r.logger.DebugContext(ctx, "sniffed protocol: ", metadata.Protocol)
 			}
-		} else if err != nil {
-			r.logger.TraceContext(ctx, "sniffed no protocol: ", err)
 		}
 		if !buffer.IsEmpty() {
 			conn = bufio.NewCachedConn(conn, buffer)
@@ -987,56 +1027,87 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 	}*/
 
 	if metadata.InboundOptions.SniffEnabled || metadata.Destination.Addr.IsUnspecified() {
-		var (
-			buffer      = buf.NewPacket()
-			destination M.Socksaddr
-			done        = make(chan struct{})
-			err         error
-		)
-		go func() {
-			sniffTimeout := C.ReadPayloadTimeout
-			if metadata.InboundOptions.SniffTimeout > 0 {
-				sniffTimeout = time.Duration(metadata.InboundOptions.SniffTimeout)
+		var bufferList []*buf.Buffer
+		for {
+			var (
+				buffer      = buf.NewPacket()
+				destination M.Socksaddr
+				done        = make(chan struct{})
+				err         error
+			)
+			go func() {
+				sniffTimeout := C.ReadPayloadTimeout
+				if metadata.InboundOptions.SniffTimeout > 0 {
+					sniffTimeout = time.Duration(metadata.InboundOptions.SniffTimeout)
+				}
+				conn.SetReadDeadline(time.Now().Add(sniffTimeout))
+				destination, err = conn.ReadPacket(buffer)
+				conn.SetReadDeadline(time.Time{})
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-ctx.Done():
+				conn.Close()
+				return ctx.Err()
 			}
-			conn.SetReadDeadline(time.Now().Add(sniffTimeout))
-			destination, err = conn.ReadPacket(buffer)
-			conn.SetReadDeadline(time.Time{})
-			close(done)
-		}()
-		select {
-		case <-done:
-		case <-ctx.Done():
-			conn.Close()
-			return ctx.Err()
-		}
-		if err != nil {
-			buffer.Release()
-			if !errors.Is(err, os.ErrDeadlineExceeded) {
-				return err
-			}
-		} else {
-			if metadata.Destination.Addr.IsUnspecified() {
-				metadata.Destination = destination
-			}
-			if metadata.InboundOptions.SniffEnabled {
-				sniffMetadata, _ := sniff.PeekPacket(ctx, buffer.Bytes(), sniff.DomainNameQuery, sniff.QUICClientHello, sniff.STUNMessage)
-				if sniffMetadata != nil {
-					metadata.Protocol = sniffMetadata.Protocol
-					metadata.Domain = sniffMetadata.Domain
-					if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
-						metadata.Destination = M.Socksaddr{
-							Fqdn: metadata.Domain,
-							Port: metadata.Destination.Port,
+			if err != nil {
+				buffer.Release()
+				if !errors.Is(err, os.ErrDeadlineExceeded) {
+					return err
+				}
+			} else {
+				if metadata.Destination.Addr.IsUnspecified() {
+					metadata.Destination = destination
+				}
+				if metadata.InboundOptions.SniffEnabled {
+					if len(bufferList) > 0 {
+						err = sniff.PeekPacket(
+							ctx,
+							&metadata,
+							buffer.Bytes(),
+							sniff.QUICClientHello,
+						)
+					} else {
+						err = sniff.PeekPacket(
+							ctx, &metadata,
+							buffer.Bytes(),
+							sniff.DomainNameQuery,
+							sniff.QUICClientHello,
+							sniff.STUNMessage,
+							sniff.UTP,
+							sniff.UDPTracker,
+							sniff.DTLSRecord)
+					}
+					if E.IsMulti(err, sniff.ErrClientHelloFragmented) && len(bufferList) == 0 {
+						bufferList = append(bufferList, buffer)
+						r.logger.DebugContext(ctx, "attempt to sniff fragmented QUIC client hello")
+						continue
+					}
+					if metadata.Protocol != "" {
+						if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
+							metadata.Destination = M.Socksaddr{
+								Fqdn: metadata.Domain,
+								Port: metadata.Destination.Port,
+							}
+						}
+						if metadata.Domain != "" && metadata.Client != "" {
+							r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol, ", domain: ", metadata.Domain, ", client: ", metadata.Client)
+						} else if metadata.Domain != "" {
+							r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol, ", domain: ", metadata.Domain)
+						} else if metadata.Client != "" {
+							r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol, ", client: ", metadata.Client)
+						} else {
+							r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol)
 						}
 					}
-					if metadata.Domain != "" {
-						r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol, ", domain: ", metadata.Domain)
-					} else {
-						r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol)
-					}
 				}
+				conn = bufio.NewCachedPacketConn(conn, buffer, destination)
 			}
-			conn = bufio.NewCachedPacketConn(conn, buffer, destination)
+			for _, cachedBuffer := range common.Reverse(bufferList) {
+				conn = bufio.NewCachedPacketConn(conn, cachedBuffer, destination)
+			}
+			break
 		}
 	}
 	if r.dnsReverseMapping != nil && metadata.Domain == "" {
@@ -1163,7 +1234,11 @@ func (r *Router) AutoDetectInterface() bool {
 
 func (r *Router) AutoDetectInterfaceFunc() control.Func {
 	if r.platformInterface != nil && r.platformInterface.UsePlatformAutoDetectInterfaceControl() {
-		return r.platformInterface.AutoDetectInterfaceControl()
+		return func(network, address string, conn syscall.RawConn) error {
+			return control.Raw(conn, func(fd uintptr) error {
+				return r.platformInterface.AutoDetectInterfaceControl(int(fd))
+			})
+		}
 	} else {
 		if r.interfaceMonitor == nil {
 			return nil
@@ -1186,11 +1261,23 @@ func (r *Router) AutoDetectInterfaceFunc() control.Func {
 	}
 }
 
+func (r *Router) RegisterAutoRedirectOutputMark(mark uint32) error {
+	if r.autoRedirectOutputMark > 0 {
+		return E.New("only one auto-redirect can be configured")
+	}
+	r.autoRedirectOutputMark = mark
+	return nil
+}
+
+func (r *Router) AutoRedirectOutputMark() uint32 {
+	return r.autoRedirectOutputMark
+}
+
 func (r *Router) DefaultInterface() string {
 	return r.defaultInterface
 }
 
-func (r *Router) DefaultMark() int {
+func (r *Router) DefaultMark() uint32 {
 	return r.defaultMark
 }
 
@@ -1302,15 +1389,16 @@ func (r *Router) updateWIFIState() {
 	}
 }
 
-func (r *Router) SortedOutboundsByDependenciesHiddify() []adapter.Outbound { //hiddify
+func (r *Router) SortedOutboundsByDependenciesHiddify() []adapter.Outbound { // hiddify
 	return r.sortedOutboundsByDependenciesHiddify
 }
+
 func (r *Router) doSortOutboundsByDependencies() {
 	started := make(map[string]bool)
 
 	var appendOutbounds func(out adapter.Outbound)
 	appendOutbounds = func(out adapter.Outbound) {
-		if started[out.Tag()] {
+		if out == nil || started[out.Tag()] {
 			return
 		}
 
@@ -1340,5 +1428,4 @@ func (r *Router) notifyWindowsPowerEvent(event int) {
 		r.pauseManager.DeviceWake()
 		_ = r.ResetNetwork()
 	}
-
 }

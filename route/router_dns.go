@@ -11,7 +11,7 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 
 	//"github.com/sagernet/sing-box/log"
-	dns "github.com/sagernet/sing-dns"
+	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common/cache"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -107,7 +107,8 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, er
 	response, cached = r.dnsClient.ExchangeCache(ctx, message)
 	if !cached {
 		var metadata *adapter.InboundContext
-		ctx, metadata = adapter.AppendContext(ctx)
+		ctx, metadata = adapter.ExtendContext(ctx)
+		metadata.Destination = M.Socksaddr{}
 		if len(message.Question) > 0 {
 			metadata.QueryType = message.Question[0].Qtype
 			switch metadata.QueryType {
@@ -127,23 +128,24 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, er
 		for {
 			var (
 				dnsCtx       context.Context
-				cancel       context.CancelFunc
 				addressLimit bool
 			)
-
 			dnsCtx, transport, strategy, rule, ruleIndex = r.matchDNS(ctx, true, ruleIndex, isAddressQuery(message))
-			dnsCtx, cancel = context.WithTimeout(dnsCtx, C.DNSTimeout)
+			dnsCtx = adapter.OverrideContext(dnsCtx)
 			if rule != nil && rule.WithAddressLimit() {
 				addressLimit = true
 				response, err = r.dnsClient.ExchangeWithResponseCheck(dnsCtx, transport, message, strategy, func(response *mDNS.Msg) bool {
-					metadata.DestinationAddresses, _ = dns.MessageToAddresses(response)
+					addresses, addrErr := dns.MessageToAddresses(response)
+					if addrErr != nil {
+						return false
+					}
+					metadata.DestinationAddresses = addresses
 					return rule.MatchAddressLimit(metadata)
 				})
 			} else {
 				addressLimit = false
 				response, err = r.dnsClient.Exchange(dnsCtx, transport, message, strategy)
 			}
-			cancel()
 			var rejected bool
 			if err != nil {
 				if errors.Is(err, dns.ErrResponseRejectedCached) {
@@ -190,10 +192,14 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 	)
 	responseAddrs, cached = r.dnsClient.LookupCache(ctx, domain, strategy)
 	if cached {
+		if len(responseAddrs) == 0 {
+			return nil, dns.RCodeNameError
+		}
 		return responseAddrs, nil
 	}
 	r.dnsLogger.DebugContext(ctx, "lookup domain ", domain)
-	ctx, metadata := adapter.AppendContext(ctx)
+	ctx, metadata := adapter.ExtendContext(ctx)
+	metadata.Destination = M.Socksaddr{}
 	metadata.Domain = domain
 	var (
 		transport         dns.Transport
@@ -205,17 +211,15 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 	for {
 		var (
 			dnsCtx       context.Context
-			cancel       context.CancelFunc
 			addressLimit bool
 		)
-		metadata.ResetRuleCache()
-		metadata.DestinationAddresses = nil
 		dnsCtx, transport, transportStrategy, rule, ruleIndex = r.matchDNS(ctx, false, ruleIndex, true)
+		dnsCtx = adapter.OverrideContext(dnsCtx)
 		if strategy == dns.DomainStrategyAsIS {
 			strategy = transportStrategy
 		}
-		dnsCtx, cancel = context.WithTimeout(dnsCtx, C.DNSTimeout)
-		responseAddrs, err = r.lookupStaticIP(domain, strategy)
+
+		responseAddrs, err = r.staticDns.lookupStaticIP(domain, strategy, true)
 
 		if err == nil && responseAddrs != nil && len(responseAddrs) > 0 {
 			r.dnsLogger.DebugContext(ctx, "Static IP responsefor ", domain, " ", responseAddrs[0])
@@ -229,7 +233,6 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 			addressLimit = false
 			responseAddrs, err = r.dnsClient.Lookup(dnsCtx, transport, domain, strategy)
 		}
-		cancel()
 		if err != nil {
 			if errors.Is(err, dns.ErrResponseRejectedCached) {
 				r.dnsLogger.DebugContext(ctx, "response rejected for ", domain, " (cached)")
@@ -254,12 +257,20 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 
 	if len(responseAddrs) > 0 {
 		r.dnsLogger.InfoContext(ctx, "lookup succeed for ", domain, ": ", strings.Join(F.MapToString(responseAddrs), " "))
+		r.staticDns.Add2staticDnsIfInternal(domain, responseAddrs)
 	} else if err != nil {
 		r.dnsLogger.ErrorContext(ctx, E.Cause(err, "lookup failed for ", domain))
 	} else {
 		r.dnsLogger.ErrorContext(ctx, "lookup failed for ", domain, ": empty result")
 		err = dns.RCodeNameError
-
+	}
+	if len(responseAddrs) == 0 && r.staticDns.IsInternal(domain) { // check again for lookup also for intenal domains
+		var err1 error
+		responseAddrs, err1 = r.staticDns.lookupStaticIP(domain, strategy, false)
+		if err1 == nil && len(responseAddrs) > 0 {
+			r.dnsLogger.InfoContext(ctx, "Static IP Internal response for ", domain, " ", responseAddrs[0])
+			err = err1
+		}
 	}
 	return responseAddrs, err
 }

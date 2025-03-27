@@ -74,7 +74,7 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		ctx:          ctx,
 		workers:      options.Workers,
 		pauseManager: service.FromContext[pause.Manager](ctx),
-		hforwarder:   hforwarder, //hiddify
+		hforwarder:   hforwarder, // hiddify
 	}
 	outbound.fakePackets = []int{0, 0}
 	outbound.fakePacketsSize = []int{0, 0}
@@ -132,6 +132,9 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		if err != nil {
 			return nil, E.Cause(err, "decode private key")
 		}
+		if len(bytes) != 32 {
+			return nil, E.New("invalid private key", options.PrivateKey)
+		}
 		privateKey = hex.EncodeToString(bytes)
 	}
 	outbound.ipcConf = "private_key=" + privateKey
@@ -156,9 +159,10 @@ func (w *WireGuard) Start() error {
 	if common.Any(w.peers, func(peer wireguard.PeerConfig) bool {
 		return !peer.Endpoint.IsValid()
 	}) {
-		// wait for all outbounds to be started and continue in PortStart
-		return nil
+		return nil // start in post start
 	}
+
+	// Proceed with starting WireGuard
 	return w.start()
 }
 
@@ -193,7 +197,17 @@ func (w *WireGuard) start() error {
 		}
 		bind = wireguard.NewClientBind(w.ctx, w, w.listener, isConnect, connectAddr, reserved)
 	}
-
+	if w.useStdNetBind || len(w.peers) > 1 {
+		for _, peer := range w.peers {
+			if peer.Reserved != [3]uint8{} {
+				bind.SetReservedForEndpoint(peer.Endpoint, peer.Reserved)
+			}
+		}
+	}
+	err = w.tunDevice.Start()
+	if err != nil {
+		return err
+	}
 	wgDevice := device.NewDevice(w.tunDevice, bind, &device.Logger{
 		Verbosef: func(format string, args ...interface{}) {
 			w.logger.Debug(fmt.Sprintf(strings.ToLower(format), args...))
@@ -246,21 +260,19 @@ func (w *WireGuard) start() error {
 	}
 	w.device = wgDevice
 	w.pauseCallback = w.pauseManager.RegisterCallback(w.onPauseUpdated)
-
-	return w.tunDevice.Start()
+	return nil
 }
 
 func (w *WireGuard) Close() error {
-	if w.hforwarder != nil { //hiddify
-		w.hforwarder.Close() //hiddify
-	} //hiddify
+	if w.hforwarder != nil { // hiddify
+		w.hforwarder.Close() // hiddify
+	} // hiddify
 	if w.device != nil {
 		w.device.Close()
 	}
 	if w.pauseCallback != nil {
 		w.pauseManager.UnregisterCallback(w.pauseCallback)
 	}
-	w.tunDevice.Close()
 	return nil
 }
 
@@ -326,13 +338,13 @@ func (w *WireGuard) onPauseUpdated(event int) {
 
 	case pause.EventDevicePaused:
 		w.device.Down()
-	case pause.EventNetworkPause: //hiddify already handled in Interface Updated
+	case pause.EventNetworkPause: // hiddify already handled in Interface Updated
 		err := w.device.Down()
 		w.logger.Info("Hiddify! Wirguard! downing net! err=", err)
 		<-time.After(50 * time.Millisecond)
 	case pause.EventDeviceWake:
 		w.device.Up()
-	case pause.EventNetworkWake: //hiddify already handled in Interface Updated
+	case pause.EventNetworkWake: // hiddify already handled in Interface Updated
 		err := w.device.Up()
 		w.logger.Info("Hiddify! Wirguard! Uping net! err=", err)
 		<-time.After(50 * time.Millisecond)

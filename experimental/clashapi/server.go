@@ -7,9 +7,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/sagernet/cors"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
@@ -19,7 +22,6 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
-	F "github.com/sagernet/sing/common/format"
 	"github.com/sagernet/sing/common/json"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/service"
@@ -28,7 +30,6 @@ import (
 	"github.com/sagernet/ws/wsutil"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 )
 
@@ -89,11 +90,16 @@ func NewServer(ctx context.Context, router adapter.Router, logFactory log.Observ
 	if options.StoreMode || options.StoreSelected || options.StoreFakeIP || options.CacheFile != "" || options.CacheID != "" {
 		return nil, E.New("cache_file and related fields in Clash API is deprecated in sing-box 1.8.0, use experimental.cache_file instead.")
 	}
+	allowedOrigins := options.AccessControlAllowOrigin
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{"*"}
+	}
 	cors := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
-		AllowedHeaders: []string{"Content-Type", "Authorization"},
-		MaxAge:         300,
+		AllowedOrigins:      allowedOrigins,
+		AllowedMethods:      []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+		AllowedHeaders:      []string{"Content-Type", "Authorization"},
+		AllowPrivateNetwork: options.AccessControlAllowPrivateNetwork,
+		MaxAge:              300,
 	})
 	chiRouter.Use(cors.Handler)
 	chiRouter.Group(func(r chi.Router) {
@@ -118,11 +124,8 @@ func NewServer(ctx context.Context, router adapter.Router, logFactory log.Observ
 	if options.ExternalUI != "" {
 		server.externalUI = filemanager.BasePath(ctx, os.ExpandEnv(options.ExternalUI))
 		chiRouter.Group(func(r chi.Router) {
-			fs := http.StripPrefix("/ui", http.FileServer(http.Dir(server.externalUI)))
-			r.Get("/ui", http.RedirectHandler("/ui/", http.StatusTemporaryRedirect).ServeHTTP)
-			r.Get("/ui/*", func(w http.ResponseWriter, r *http.Request) {
-				fs.ServeHTTP(w, r)
-			})
+			r.Get("/ui", http.RedirectHandler("/ui/", http.StatusMovedPermanently).ServeHTTP)
+			r.Handle("/ui/*", http.StripPrefix("/ui/", http.FileServer(http.Dir(server.externalUI))))
 		})
 	}
 	return server, nil
@@ -144,7 +147,18 @@ func (s *Server) PreStart() error {
 func (s *Server) Start() error {
 	if s.externalController {
 		s.checkAndDownloadExternalUI()
-		listener, err := net.Listen("tcp", s.httpServer.Addr)
+		var (
+			listener net.Listener
+			err      error
+		)
+		for i := 0; i < 3; i++ {
+			listener, err = net.Listen("tcp", s.httpServer.Addr)
+			if runtime.GOOS == "android" && errors.Is(err, syscall.EADDRINUSE) {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			break
+		}
 		if err != nil {
 			return E.Cause(err, "external controller listen error")
 		}
@@ -218,56 +232,13 @@ func (s *Server) TrafficManager() *trafficontrol.Manager {
 }
 
 func (s *Server) RoutedConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, matchedRule adapter.Rule) (net.Conn, adapter.Tracker) {
-	tracker := trafficontrol.NewTCPTracker(conn, s.trafficManager, castMetadata(metadata), s.router, matchedRule)
+	tracker := trafficontrol.NewTCPTracker(conn, s.trafficManager, metadata, s.router, matchedRule)
 	return tracker, tracker
 }
 
 func (s *Server) RoutedPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, matchedRule adapter.Rule) (N.PacketConn, adapter.Tracker) {
-	tracker := trafficontrol.NewUDPTracker(conn, s.trafficManager, castMetadata(metadata), s.router, matchedRule)
+	tracker := trafficontrol.NewUDPTracker(conn, s.trafficManager, metadata, s.router, matchedRule)
 	return tracker, tracker
-}
-
-func castMetadata(metadata adapter.InboundContext) trafficontrol.Metadata {
-	var inbound string
-	if metadata.Inbound != "" {
-		inbound = metadata.InboundType + "/" + metadata.Inbound
-	} else {
-		inbound = metadata.InboundType
-	}
-	var domain string
-	if metadata.Domain != "" {
-		domain = metadata.Domain
-	} else {
-		domain = metadata.Destination.Fqdn
-	}
-	var processPath string
-	if metadata.ProcessInfo != nil {
-		if metadata.ProcessInfo.ProcessPath != "" {
-			processPath = metadata.ProcessInfo.ProcessPath
-		} else if metadata.ProcessInfo.PackageName != "" {
-			processPath = metadata.ProcessInfo.PackageName
-		}
-		if processPath == "" {
-			if metadata.ProcessInfo.UserId != -1 {
-				processPath = F.ToString(metadata.ProcessInfo.UserId)
-			}
-		} else if metadata.ProcessInfo.User != "" {
-			processPath = F.ToString(processPath, " (", metadata.ProcessInfo.User, ")")
-		} else if metadata.ProcessInfo.UserId != -1 {
-			processPath = F.ToString(processPath, " (", metadata.ProcessInfo.UserId, ")")
-		}
-	}
-	return trafficontrol.Metadata{
-		NetWork:     metadata.Network,
-		Type:        inbound,
-		SrcIP:       metadata.Source.Addr,
-		DstIP:       metadata.Destination.Addr,
-		SrcPort:     F.ToString(metadata.Source.Port),
-		DstPort:     F.ToString(metadata.Destination.Port),
-		Host:        domain,
-		DNSMode:     "normal",
-		ProcessPath: processPath,
-	}
 }
 
 func authentication(serverSecret string) func(next http.Handler) http.Handler {
@@ -308,10 +279,11 @@ func authentication(serverSecret string) func(next http.Handler) http.Handler {
 
 func hello(redirect bool) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if redirect {
-			http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)
-		} else {
+		contentType := r.Header.Get("Content-Type")
+		if !redirect || contentType == "application/json" {
 			render.JSON(w, r, render.M{"hello": "clash"})
+		} else {
+			http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)
 		}
 	}
 }
@@ -341,27 +313,29 @@ func traffic(trafficManager *trafficontrol.Manager) func(w http.ResponseWriter, 
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
 		buf := &bytes.Buffer{}
-		var err error
+		uploadTotal, downloadTotal := trafficManager.Total()
 		for range tick.C {
 			buf.Reset()
-			up, down := trafficManager.Now()
-			if err := json.NewEncoder(buf).Encode(Traffic{
-				Up:   up,
-				Down: down,
-			}); err != nil {
+			uploadTotalNew, downloadTotalNew := trafficManager.Total()
+			err := json.NewEncoder(buf).Encode(Traffic{
+				Up:   uploadTotalNew - uploadTotal,
+				Down: downloadTotalNew - downloadTotal,
+			})
+			if err != nil {
 				break
 			}
-
 			if conn == nil {
 				_, err = w.Write(buf.Bytes())
 				w.(http.Flusher).Flush()
 			} else {
 				err = wsutil.WriteServerText(conn, buf.Bytes())
 			}
-
 			if err != nil {
 				break
 			}
+
+			uploadTotal = uploadTotalNew
+			downloadTotal = downloadTotalNew
 		}
 	}
 }
