@@ -2,30 +2,23 @@ package adapter
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"net/netip"
-	"sync"
 
-	"github.com/sagernet/sing-box/common/geoip"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-dns"
-	"github.com/sagernet/sing-tun"
+	"github.com/fromil88/sing-box/common/geoip"
+	dns "github.com/sagernet/sing-dns"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/control"
-	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 
 	mdns "github.com/miekg/dns"
-	"go4.org/netipx"
 )
 
 type Router interface {
 	Service
 	PreStarter
 	PostStarter
-	Cleanup() error
 
 	SortedOutboundsByDependenciesHiddify() []Outbound //hiddify
 	Outbounds() []Outbound
@@ -53,9 +46,7 @@ type Router interface {
 	DefaultInterface() string
 	AutoDetectInterface() bool
 	AutoDetectInterfaceFunc() control.Func
-	DefaultMark() uint32
-	RegisterAutoRedirectOutputMark(mark uint32) error
-	AutoRedirectOutputMark() uint32
+	DefaultMark() int
 	NetworkMonitor() tun.NetworkUpdateMonitor
 	InterfaceMonitor() tun.DefaultInterfaceMonitor
 	PackageManager() tun.PackageManager
@@ -102,63 +93,21 @@ type DNSRule interface {
 }
 
 type RuleSet interface {
-	Name() string
-	StartContext(ctx context.Context, startContext *HTTPStartContext) error
-	PostStart() error
+	StartContext(ctx context.Context, startContext RuleSetStartContext) error
 	Metadata() RuleSetMetadata
-	ExtractIPSet() []*netipx.IPSet
-	IncRef()
-	DecRef()
-	Cleanup()
-	RegisterCallback(callback RuleSetUpdateCallback) *list.Element[RuleSetUpdateCallback]
-	UnregisterCallback(element *list.Element[RuleSetUpdateCallback])
 	Close() error
 	HeadlessRule
 }
-
-type RuleSetUpdateCallback func(it RuleSet)
 
 type RuleSetMetadata struct {
 	ContainsProcessRule bool
 	ContainsWIFIRule    bool
 	ContainsIPCIDRRule  bool
 }
-type HTTPStartContext struct {
-	access          sync.Mutex
-	httpClientCache map[string]*http.Client
-}
 
-func NewHTTPStartContext() *HTTPStartContext {
-	return &HTTPStartContext{
-		httpClientCache: make(map[string]*http.Client),
-	}
-}
-
-func (c *HTTPStartContext) HTTPClient(detour string, dialer N.Dialer) *http.Client {
-	c.access.Lock()
-	defer c.access.Unlock()
-	if httpClient, loaded := c.httpClientCache[detour]; loaded {
-		return httpClient
-	}
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			ForceAttemptHTTP2:   true,
-			TLSHandshakeTimeout: C.TCPTimeout,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
-			},
-		},
-	}
-	c.httpClientCache[detour] = httpClient
-	return httpClient
-}
-
-func (c *HTTPStartContext) Close() {
-	c.access.Lock()
-	defer c.access.Unlock()
-	for _, client := range c.httpClientCache {
-		client.CloseIdleConnections()
-	}
+type RuleSetStartContext interface {
+	HTTPClient(detour string, dialer N.Dialer) *http.Client
+	Close()
 }
 
 type InterfaceUpdateListener interface {

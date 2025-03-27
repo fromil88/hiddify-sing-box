@@ -4,75 +4,57 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"math/rand"
 	"net"
-	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/gofrs/uuid/v5"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 
 	dns "github.com/sagernet/sing-dns"
+	"github.com/sagernet/sing/common"
+	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/common/uot"
+	"github.com/sagernet/sing/protocol/socks"
 	"github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/infra/conf"
 
 	// Mandatory features. Can't remove unless there are replacements.
-
 	_ "github.com/xtls/xray-core/app/dispatcher"
 	_ "github.com/xtls/xray-core/app/proxyman/inbound"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
-	_ "github.com/xtls/xray-core/common/errors"
 
-	// // Default commander and all its services. This is an optional feature.
-	// _ "github.com/xtls/xray-core/app/commander"
-	// _ "github.com/xtls/xray-core/app/log/command"
-	// _ "github.com/xtls/xray-core/app/proxyman/command"
-	// _ "github.com/xtls/xray-core/app/stats/command"
-
-	// // Developer preview services
-	_ "github.com/xtls/xray-core/app/observatory/command"
-
-	// Other optional features.
-	_ "github.com/xtls/xray-core/app/dns"
-	// _ "github.com/xtls/xray-core/app/dns/fakedns"
-	_ "github.com/xtls/xray-core/app/log"
-	// _ "github.com/xtls/xray-core/app/metrics"
-	// _ "github.com/xtls/xray-core/app/policy"
-	// _ "github.com/xtls/xray-core/app/reverse"
-	// _ "github.com/xtls/xray-core/app/router"
-	// _ "github.com/xtls/xray-core/app/stats"
-
-	// // Fix dependency cycle caused by core import in internet package
-	// _ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
-
-	// // Developer preview features
-	_ "github.com/xtls/xray-core/app/observatory"
-
+	// Fix dependency cycle caused by core import in internet package
+	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
 	// Inbound and outbound proxies.
-	_ "github.com/xtls/xray-core/proxy/blackhole"
-	_ "github.com/xtls/xray-core/proxy/dns"
+	// _ "github.com/xtls/xray-core/proxy/blackhole"
+	// _ "github.com/xtls/xray-core/proxy/dns"
 	_ "github.com/xtls/xray-core/proxy/dokodemo"
 	_ "github.com/xtls/xray-core/proxy/freedom"
-	_ "github.com/xtls/xray-core/proxy/http"
-	_ "github.com/xtls/xray-core/proxy/loopback"
-	_ "github.com/xtls/xray-core/proxy/shadowsocks"
-	_ "github.com/xtls/xray-core/proxy/socks"
-	_ "github.com/xtls/xray-core/proxy/trojan"
-	_ "github.com/xtls/xray-core/proxy/vless/inbound"
-	_ "github.com/xtls/xray-core/proxy/vless/outbound"
-	_ "github.com/xtls/xray-core/proxy/vmess/inbound"
-	_ "github.com/xtls/xray-core/proxy/vmess/outbound"
 
+	// _ "github.com/xtls/xray-core/proxy/http"
+	// _ "github.com/xtls/xray-core/proxy/loopback"
+	// _ "github.com/xtls/xray-core/proxy/shadowsocks"
+	// _ "github.com/xtls/xray-core/proxy/socks"
+	_ "github.com/xtls/xray-core/proxy/trojan"
+	// _ "github.com/xtls/xray-core/proxy/vless/inbound"
+	_ "github.com/xtls/xray-core/proxy/vless/outbound"
+	// _ "github.com/xtls/xray-core/proxy/vmess/inbound"
+	_ "github.com/xtls/xray-core/proxy/vmess/outbound"
 	// _ "github.com/xtls/xray-core/proxy/wireguard"
 
 	// Transports
+	_ "github.com/xtls/xray-core/transport/internet/domainsocket"
 	_ "github.com/xtls/xray-core/transport/internet/grpc"
+	_ "github.com/xtls/xray-core/transport/internet/http"
 	_ "github.com/xtls/xray-core/transport/internet/httpupgrade"
 	_ "github.com/xtls/xray-core/transport/internet/kcp"
+	_ "github.com/xtls/xray-core/transport/internet/quic"
 	_ "github.com/xtls/xray-core/transport/internet/reality"
 	_ "github.com/xtls/xray-core/transport/internet/splithttp"
 	_ "github.com/xtls/xray-core/transport/internet/tcp"
@@ -90,187 +72,125 @@ import (
 
 	// _ "github.com/xtls/xray-core/transport/internet/headers/wireguard"
 
-	// JSON & TOML & YAML
+	// JSON
 	_ "github.com/xtls/xray-core/main/json"
-	// _ "github.com/xtls/xray-core/main/toml"
-	// _ "github.com/xtls/xray-core/main/yaml"
-	// // Load config from file or http(s)
-	// _ "github.com/xtls/xray-core/main/confloader/external"
-	// Commands
-	// _ "github.com/xtls/xray-core/main/commands/all"
-
-	xlog "github.com/xtls/xray-core/common/log"
-	xnet "github.com/xtls/xray-core/common/net"
 )
 
-var _ adapter.Outbound = (*Xray2)(nil)
+var _ adapter.Outbound = (*Xray)(nil)
 
-type Xray2 struct {
+type Xray struct {
 	myOutboundAdapter
+	client       *socks.Client
 	resolve      bool
+	uotClient    *uot.Client
 	xrayInstance *core.Instance
 	proxyStr     string
-	xlogger      xlogInstance
 }
 
-const defaultXrayConfig = `{
-  "log": {
-	"loglevel": "info",
-	"dnsLog": false
-  },
-  "inbounds": [],
-  "outbounds": [],
-  "routing": {
-	"rules": []
-  },
-  "dns": {
-	 "servers": [
-      "8.8.8.8",
-      "223.5.5.5",
-	  "h2c://1.1.1.1/dns-query"
-	  ],
-	"tag": "hiddify-dns-out"
-  }
-}`
-
-var mainProtocols = []string{"vmess", "vless", "trojan", "shadowsocks", "direct"}
-
-func contains(slice []string, item string) bool {
-	for _, v := range slice {
-		if v == item {
-			return true
+func getRandomFreePort() uint16 {
+	for {
+		port := rand.Intn(25535) + 30000 // range 30000 to 65535
+		l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err == nil {
+			l.Close()
+			l, err := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
+			if err == nil {
+				l.Close()
+				return uint16(port)
+			}
 		}
 	}
-	return false
 }
-
-func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray2, error) {
-	// var defConfig map[string]any
-	// err := json.Unmarshal([]byte(defaultXrayConfig), &defConfig)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// xrayConfig, err := readXrayConfig(options.XConfig)
-	// if err != nil {
-	// 	return nil, err
-
-	// }
-
-	if options.XConfig == nil {
-		return nil, errors.New("xray config is nil")
-	}
-	xrayConfig := *options.XConfig
-	if outbounds, exists := xrayConfig["outbounds"]; !exists || outbounds == nil {
-		xrayConfig = map[string]any{"outbounds": []map[string]any{xrayConfig}}
-	}
-	// defConfig := xrayConfig
-	selectedIff := router.DefaultInterface()
-	for _, iff := range router.InterfaceFinder().Interfaces() {
-		if !strings.Contains(iff.Name, "tun") {
-			selectedIff = iff.Name
-			break
-		}
-	}
-
-	xrayConfig["inbounds"] = nil
-	if options.XDebug {
-		xrayConfig["log"] = &conf.LogConfig{
-			LogLevel: "debug",
-			DNSLog:   true,
-		}
-	} else {
-		xrayConfig["log"] = &conf.LogConfig{
-			LogLevel: "info",
-			DNSLog:   false,
-		}
-	}
-
-	if outbounds, ok := xrayConfig["outbounds"].([]interface{}); ok {
-		for _, item := range outbounds {
-			if out, ok := item.(map[string]any); ok {
-				if out["streamSettings"] == nil {
-					out["streamSettings"] = map[string]any{}
-				}
-
-				streamSettings, _ := out["streamSettings"].(map[string]any) // Ensure it's a map
-				if streamSettings["sockopt"] == nil {
-					streamSettings["sockopt"] = map[string]any{}
-				}
-
-				sockopt, _ := streamSettings["sockopt"].(map[string]any) // Ensure it's a map
-				sockopt["interface"] = selectedIff
-
-				// Update back
-				streamSettings["sockopt"] = sockopt
-				out["streamSettings"] = streamSettings
-			}
-		}
-	}
-	hasDnsHandler := false
-
-	if dns, ok := xrayConfig["dns"].(map[string]interface{}); ok {
-		if tag, exists := dns["tag"]; exists {
-			if tagStr, ok := tag.(string); ok && len(tagStr) > 0 {
-				hasDnsHandler = true
-			}
-		}
-	}
-	// {
-	// 	xrayConfig["dns"] = defConfig["dns"]
-	// }
-
-	// dnsConfig, _ := xrayConfig["dns"].(map[string]any) // Safe type assertion
-
-	// if dnsConfig["tag"] == nil || dnsConfig["tag"] == "" {
-	// 	dnsConfig["tag"] = "hiddify-dns-out"
-	// }
-
-	// if servers, ok := dnsConfig["servers"].([]interface{}); !ok || len(servers) == 0 {
-	// 	dnsConfig["servers"] = defConfig["dns"].(map[string]any)["servers"]
-	// }
-
-	protocol := "XRay"
-
-	if outbounds, ok := xrayConfig["outbounds"].([]interface{}); ok {
-		for _, item := range outbounds {
-			if out, ok := item.(map[string]any); ok {
-				if proto, exists := out["protocol"].(string); exists {
-					protocol = proto
-					if contains(mainProtocols, proto) { // Use proto, not out.Protocol
-						break
-					}
-				}
-			}
-		}
-	}
-	jsonData, err := json.MarshalIndent(xrayConfig, "", "  ")
-	if err != nil {
-		fmt.Printf("Error marshaling to JSON: %v", err)
-	}
-
-	fmt.Printf(string(jsonData))
-
-	xlogger := xlogInstance{
-		singlogger: logger,
-		started:    false,
-	}
-	reader := bytes.NewReader(jsonData)
-
-	xrayFinalConfig, err := core.LoadConfig("json", reader)
-	server, err := core.NewWithContext(ctx, xrayFinalConfig)
-	xlog.RegisterHandler(&xlogger)
+func NewXray(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.XrayOutboundOptions) (*Xray, error) {
+	newuuid, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
 	}
+	userpass := newuuid.String()
+	port := getRandomFreePort()
+	outbounds := []map[string]any{}
+	if options.XrayOutboundJson != nil {
+		xrayconf := *options.XrayOutboundJson
+		if options.Fragment == nil || options.Fragment.Packets == "" {
+			xrayconf["sockopt"] = map[string]any{}
+		} else {
+			xrayconf["sockopt"] = map[string]any{
+				"dialerProxy":      "fragment",
+				"tcpKeepAliveIdle": 100,
+				"tcpNoDelay":       true,
+			}
+		}
+		outbounds = append(outbounds, xrayconf)
+	}
 
-	// socksNet := M.ParseSocksaddrHostPort("127.0.0.1", port)
+	if options.Fragment != nil && options.Fragment.Packets != "" {
+		outbounds = append(outbounds, map[string]any{
+			"tag":      "fragment",
+			"protocol": "freedom",
+			"settings": map[string]any{
+				"domainStrategy": "AsIs",
+				"fragment":       options.Fragment,
+			},
+			"streamSettings": map[string]any{
+				"sockopt": map[string]any{
+					"tcpKeepAliveIdle": 100,
+					"tcpNoDelay":       true,
+				},
+			},
+		})
+	}
 
-	// outboundDialer, err := dialer.New(router, options.DialerOptions)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	outbound := &Xray2{
+	xray := map[string]any{
+		"log": map[string]any{
+			"loglevel": options.LogLevel,
+		},
+		"inbounds": []any{
+			map[string]any{
+				"listen":   "127.0.0.1",
+				"port":     port,
+				"protocol": "socks",
+				"settings": map[string]any{
+					"udp":  true,
+					"auth": "password",
+					"accounts": []any{
+						map[string]any{
+							"user": userpass,
+							"pass": userpass,
+						},
+					},
+				},
+			},
+		},
+		"outbounds": outbounds,
+	}
+	protocol, ok := outbounds[0]["protocol"].(string)
+	if !ok {
+		return nil, fmt.Errorf("incorrect protocol")
+	}
+	jsonData, err := json.MarshalIndent(xray, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling to JSON: %v", err)
+	}
+	fmt.Printf(string(jsonData))
+
+	// options.XrayOutboundJson
+	reader := bytes.NewReader(jsonData)
+
+	xrayConfig, err := core.LoadConfig("json", reader)
+	if err != nil {
+		return nil, err
+	}
+	server, err := core.New(xrayConfig)
+	if err != nil {
+		return nil, err
+	}
+	socksNet := M.ParseSocksaddrHostPort("127.0.0.1", port)
+
+	outboundDialer, err := dialer.New(router, options.DialerOptions)
+	if err != nil {
+		return nil, err
+	}
+	outbound := &Xray{
 		myOutboundAdapter: myOutboundAdapter{
 			protocol:     C.TypeSOCKS,
 			network:      options.Network.Build(),
@@ -279,88 +199,72 @@ func NewXray2(ctx context.Context, router adapter.Router, logger log.ContextLogg
 			tag:          tag,
 			dependencies: withDialerDependency(options.DialerOptions),
 		},
-		// client: socks.NewClient(outboundDialer, socksNet, socks.Version5, userpass, userpass),
+		client: socks.NewClient(outboundDialer, socksNet, socks.Version5, userpass, userpass),
 		// client:       socks.NewClient(outboundDialer, socksNet, socks.Version5, "", ""),
-		resolve:      !hasDnsHandler,
+		resolve:      false,
 		xrayInstance: server,
-		xlogger:      xlogger,
 		proxyStr:     "X" + protocol,
 	}
-	// uotOptions := common.PtrValueOrDefault(options.UDPOverTCP)
-	// if uotOptions.Enabled {
-	// 	outbound.uotClient = &uot.Client{
-	// 		Dialer:  outbound.client,
-	// 		Version: uotOptions.Version,
-	// 	}
-	// }
+	uotOptions := common.PtrValueOrDefault(options.UDPOverTCP)
+	if uotOptions.Enabled {
+		outbound.uotClient = &uot.Client{
+			Dialer:  outbound.client,
+			Version: uotOptions.Version,
+		}
+	}
 	return outbound, nil
 }
 
-func readXrayConfig(jsonData string) (*conf.Config, error) {
-	// options.XrayOutboundJson
-
-	xrayConfig := conf.Config{}
-	err := json.Unmarshal([]byte(jsonData), &xrayConfig)
-	if err != nil {
-		return nil, err
-	}
-	return &xrayConfig, nil
-}
-
-func (h *Xray2) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	defer func() {
-		if r := recover(); r != nil {
-			h.logger.ErrorContext(ctx, "Xray2 panic: ", r)
-		}
-	}()
-
-	ctx, metadata := adapter.ExtendContext(ctx)
+func (h *Xray) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
-	if h.resolve && destination.IsFqdn() {
-		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
-		if err != nil {
-			return nil, err
-		}
-		return N.DialSerial(ctx, h, network, destination, destinationAddresses)
-	}
-	var dest xnet.Destination
 	switch N.NetworkName(network) {
 	case N.NetworkTCP:
-		dest = xnet.TCPDestination(xnet.ParseAddress(destination.AddrString()), xnet.Port(destination.Port))
+		h.logger.InfoContext(ctx, "outbound connection to ", destination)
 	case N.NetworkUDP:
-		dest = xnet.UDPDestination(xnet.ParseAddress(destination.AddrString()), xnet.Port(destination.Port))
-	}
-	return core.Dial(ctx, h.xrayInstance, dest)
-}
-
-func (h *Xray2) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	defer func() {
-		if r := recover(); r != nil {
-			h.logger.ErrorContext(ctx, "Xray2 udp panic: ", r)
+		if h.uotClient != nil {
+			h.logger.InfoContext(ctx, "outbound UoT connect packet connection to ", destination)
+			return h.uotClient.DialContext(ctx, network, destination)
 		}
-	}()
-	ctx, metadata := adapter.ExtendContext(ctx)
-	metadata.Outbound = h.tag
-	metadata.Destination = destination
-
+		h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
+	default:
+		return nil, E.Extend(N.ErrUnknownNetwork, network)
+	}
 	if h.resolve && destination.IsFqdn() {
 		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
 		if err != nil {
 			return nil, err
 		}
-		packetConn, _, err := N.ListenSerial(ctx, h, destination, destinationAddresses)
+		return N.DialSerial(ctx, h.client, network, destination, destinationAddresses)
+	}
+	return h.client.DialContext(ctx, network, destination)
+}
+
+func (h *Xray) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+	ctx, metadata := adapter.AppendContext(ctx)
+	metadata.Outbound = h.tag
+	metadata.Destination = destination
+	if h.uotClient != nil {
+		h.logger.InfoContext(ctx, "outbound UoT packet connection to ", destination)
+		return h.uotClient.ListenPacket(ctx, destination)
+	}
+	if h.resolve && destination.IsFqdn() {
+		destinationAddresses, err := h.router.LookupDefault(ctx, destination.Fqdn)
+		if err != nil {
+			return nil, err
+		}
+		packetConn, _, err := N.ListenSerial(ctx, h.client, destination, destinationAddresses)
 		if err != nil {
 			return nil, err
 		}
 		return packetConn, nil
 	}
-
 	h.logger.InfoContext(ctx, "outbound packet connection to ", destination)
-	return core.DialUDP(ctx, h.xrayInstance)
+	return h.client.ListenPacket(ctx, destination)
 }
 
-func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+func (h *Xray) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
 	if h.resolve {
 		return NewDirectConnection(ctx, h.router, h, conn, metadata, dns.DomainStrategyUseIPv4)
 	} else {
@@ -368,69 +272,20 @@ func (h *Xray2) NewConnection(ctx context.Context, conn net.Conn, metadata adapt
 	}
 }
 
-func (h *Xray2) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
+func (h *Xray) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
 	if h.resolve {
 		return NewDirectPacketConnection(ctx, h.router, h, conn, metadata, dns.DomainStrategyUseIPv4)
 	} else {
 		return NewPacketConnection(ctx, h, conn, metadata)
 	}
 }
-
-func (w *Xray2) Start() error {
-	w.xlogger.started = true
+func (w *Xray) Start() error {
 	return w.xrayInstance.Start()
 }
-
-func (w *Xray2) Close() error {
-	w.xlogger.started = false
+func (w *Xray) Close() error {
 	return w.xrayInstance.Close()
 }
 
-func (w *Xray2) Type() string {
+func (w *Xray) Type() string {
 	return w.proxyStr
 }
-
-// xlogInstance is a log.Handler that handles logs.
-type xlogInstance struct {
-	singlogger log.Logger
-	started    bool
-}
-
-func (x *xlogInstance) Handle(msg xlog.Message) {
-	if msg == nil {
-		x.singlogger.Debug("no message")
-		return
-	}
-
-	msgstr := fmt.Sprint("X:", msg)
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println(msgstr)
-		}
-	}()
-	if !x.started {
-		fmt.Println(msgstr)
-		return
-	}
-	switch msg := msg.(type) {
-	case *xlog.AccessMessage:
-		x.singlogger.Trace(msgstr)
-	case *xlog.DNSLog:
-		x.singlogger.Trace(msgstr)
-	case *xlog.GeneralMessage:
-		switch msg.Severity {
-		case xlog.Severity_Debug:
-			x.singlogger.Debug(msgstr)
-		case xlog.Severity_Info:
-			x.singlogger.Info(msgstr)
-		case xlog.Severity_Warning:
-			x.singlogger.Warn(msgstr)
-		case xlog.Severity_Error:
-			x.singlogger.Error(msgstr)
-		}
-	default:
-		x.singlogger.Debug(msgstr)
-	}
-}
-
-var _ xlog.Handler = (*xlogInstance)(nil)

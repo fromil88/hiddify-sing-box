@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tls"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/tls"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"

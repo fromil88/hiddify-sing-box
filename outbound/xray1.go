@@ -9,11 +9,11 @@ package outbound
 // 	"net"
 
 // 	"github.com/gofrs/uuid/v5"
-// 	"github.com/sagernet/sing-box/adapter"
-// 	"github.com/sagernet/sing-box/common/dialer"
-// 	C "github.com/sagernet/sing-box/constant"
-// 	"github.com/sagernet/sing-box/log"
-// 	"github.com/sagernet/sing-box/option"
+// 	"github.com/fromil88/sing-box/adapter"
+// 	"github.com/fromil88/sing-box/common/dialer"
+// 	C "github.com/fromil88/sing-box/constant"
+// 	"github.com/fromil88/sing-box/log"
+// 	"github.com/fromil88/sing-box/option"
 
 // 	dns "github.com/sagernet/sing-dns"
 // 	"github.com/sagernet/sing/common"

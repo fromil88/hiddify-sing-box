@@ -4,8 +4,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
+	"github.com/fromil88/sing-box/adapter"
+	C "github.com/fromil88/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	F "github.com/sagernet/sing/common/format"
 )
@@ -29,13 +29,9 @@ func (r *abstractDefaultRule) Type() string {
 
 func (r *abstractDefaultRule) Start() error {
 	for _, item := range r.allItems {
-		if starter, isStarter := item.(interface {
-			Start() error
-		}); isStarter {
-			err := starter.Start()
-			if err != nil {
-				return err
-			}
+		err := common.Start(item)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -187,13 +183,8 @@ func (r *abstractLogicalRule) UpdateGeosite() error {
 }
 
 func (r *abstractLogicalRule) Start() error {
-	for _, rule := range common.FilterIsInstance(r.rules, func(it adapter.HeadlessRule) (interface {
-		Start() error
-	}, bool,
-	) {
-		rule, loaded := it.(interface {
-			Start() error
-		})
+	for _, rule := range common.FilterIsInstance(r.rules, func(it adapter.HeadlessRule) (common.Starter, bool) {
+		rule, loaded := it.(common.Starter)
 		return rule, loaded
 	}) {
 		err := rule.Start()

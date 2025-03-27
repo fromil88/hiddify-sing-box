@@ -11,7 +11,7 @@ docker run -d \
   -v /etc/sing-box:/etc/sing-box/ \
   --name=sing-box \
   --restart=always \
-  ghcr.io/sagernet/sing-box \
+  ghcr.io/fromil88/sing-box \
   -D /var/lib/sing-box \
   -C /etc/sing-box/ run
 ```
@@ -22,7 +22,7 @@ docker run -d \
 version: "3.8"
 services:
   sing-box:
-    image: ghcr.io/sagernet/sing-box
+    image: ghcr.io/fromil88/sing-box
     container_name: sing-box
     restart: always
     volumes:

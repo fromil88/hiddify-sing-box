@@ -5,12 +5,12 @@ import (
 	"net"
 	"os"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/tls"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	"github.com/fromil88/sing-box/common/tls"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -54,7 +54,7 @@ func NewHTTP(ctx context.Context, router adapter.Router, logger log.ContextLogge
 }
 
 func (h *HTTP) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	h.logger.InfoContext(ctx, "outbound connection to ", destination)

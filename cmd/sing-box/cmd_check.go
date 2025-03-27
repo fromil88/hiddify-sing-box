@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"github.com/sagernet/sing-box"
-	"github.com/sagernet/sing-box/log"
+	"github.com/fromil88/sing-box"
+	"github.com/fromil88/sing-box/log"
 
 	"github.com/spf13/cobra"
 )

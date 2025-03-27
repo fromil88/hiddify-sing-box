@@ -4,7 +4,7 @@ import (
 	"net/netip"
 	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
+	"github.com/fromil88/sing-box/adapter"
 	E "github.com/sagernet/sing/common/exceptions"
 
 	"go4.org/netipx"
@@ -75,19 +75,18 @@ func NewRawIPCIDRItem(isSource bool, ipSet *netipx.IPSet) *IPCIDRItem {
 func (r *IPCIDRItem) Match(metadata *adapter.InboundContext) bool {
 	if r.isSource || metadata.IPCIDRMatchSource {
 		return r.ipSet.Contains(metadata.Source.Addr)
-	}
-	if metadata.Destination.IsIP() {
-		return r.ipSet.Contains(metadata.Destination.Addr)
-	}
-	if len(metadata.DestinationAddresses) > 0 {
-		for _, address := range metadata.DestinationAddresses {
-			if r.ipSet.Contains(address) {
-				return true
+	} else {
+		if metadata.Destination.IsIP() {
+			return r.ipSet.Contains(metadata.Destination.Addr)
+		} else {
+			for _, address := range metadata.DestinationAddresses {
+				if r.ipSet.Contains(address) {
+					return true
+				}
 			}
 		}
-		return false
 	}
-	return metadata.IPCIDRAcceptEmpty
+	return false
 }
 
 func (r *IPCIDRItem) String() string {

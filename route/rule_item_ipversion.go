@@ -1,7 +1,7 @@
 package route
 
 import (
-	"github.com/sagernet/sing-box/adapter"
+	"github.com/fromil88/sing-box/adapter"
 )
 
 var _ RuleItem = (*IPVersionItem)(nil)

@@ -3,18 +3,18 @@ package outbound
 import (
 	"context"
 
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
 func New(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.Outbound) (adapter.Outbound, error) {
+	var metadata *adapter.InboundContext
 	if tag != "" {
-		ctx = adapter.WithContext(ctx, &adapter.InboundContext{
-			Outbound: tag,
-		})
+		ctx, metadata = adapter.AppendContext(ctx)
+		metadata.Outbound = tag
 	}
 	if options.Type == "" {
 		return nil, E.New("missing outbound type")

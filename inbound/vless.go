@@ -5,14 +5,14 @@ import (
 	"net"
 	"os"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/mux"
-	"github.com/sagernet/sing-box/common/tls"
-	"github.com/sagernet/sing-box/common/uot"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/transport/v2ray"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/mux"
+	"github.com/fromil88/sing-box/common/tls"
+	"github.com/fromil88/sing-box/common/uot"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
+	"github.com/fromil88/sing-box/transport/v2ray"
 	"github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing-vmess/packetaddr"
 	"github.com/sagernet/sing-vmess/vless"
@@ -83,11 +83,12 @@ func NewVLESS(ctx context.Context, router adapter.Router, logger log.ContextLogg
 }
 
 func (h *VLESS) Start() error {
-	if h.tlsConfig != nil {
-		err := h.tlsConfig.Start()
-		if err != nil {
-			return err
-		}
+	err := common.Start(
+		h.service,
+		h.tlsConfig,
+	)
+	if err != nil {
+		return err
 	}
 	if h.transport == nil {
 		return h.myInboundAdapter.Start()

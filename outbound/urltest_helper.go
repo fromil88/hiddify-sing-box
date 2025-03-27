@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/sagernet/sing-box/log"
+	"github.com/fromil88/sing-box/log"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/hiddify/ipinfo"
-	"github.com/sagernet/sing-box/common/urltest"
-	C "github.com/sagernet/sing-box/constant"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/hiddify/ipinfo"
+	"github.com/fromil88/sing-box/common/urltest"
+	C "github.com/fromil88/sing-box/constant"
 	"github.com/sagernet/sing/common/batch"
 )
 

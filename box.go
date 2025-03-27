@@ -8,17 +8,17 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/taskmonitor"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental"
-	"github.com/sagernet/sing-box/experimental/cachefile"
-	"github.com/sagernet/sing-box/experimental/libbox/platform"
-	"github.com/sagernet/sing-box/inbound"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/outbound"
-	"github.com/sagernet/sing-box/route"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/taskmonitor"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/experimental"
+	"github.com/fromil88/sing-box/experimental/cachefile"
+	"github.com/fromil88/sing-box/experimental/libbox/platform"
+	"github.com/fromil88/sing-box/inbound"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
+	"github.com/fromil88/sing-box/outbound"
+	"github.com/fromil88/sing-box/route"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -29,9 +29,8 @@ import (
 var _ adapter.Service = (*Box)(nil)
 
 type Box struct {
-	ctx          context.Context
 	createdAt    time.Time
-	router       *route.Router
+	router       adapter.Router
 	inbounds     []adapter.Inbound
 	outbounds    []adapter.Outbound
 	logFactory   log.Factory
@@ -72,7 +71,7 @@ func New(options Options) (*Box, error) {
 		needV2RayAPI = true
 	}
 	var defaultLogWriter io.Writer
-	if options.PlatformLogWriter != nil {
+	if options.PlatformInterface != nil {
 		defaultLogWriter = io.Discard
 	}
 	logFactory, err := log.New(log.Options{
@@ -112,7 +111,6 @@ func New(options Options) (*Box, error) {
 			ctx,
 			router,
 			logFactory.NewLogger(F.ToString("inbound/", inboundOptions.Type, "[", tag, "]")),
-			tag,
 			inboundOptions,
 			options.PlatformInterface,
 		)
@@ -121,8 +119,8 @@ func New(options Options) (*Box, error) {
 		}
 		inbounds = append(inbounds, in)
 	}
-	var lastErr error      // hiddify
-	var lastErrDesc string // hiddify
+	var lastErr error      //hiddify
+	var lastErrDesc string //hiddify
 	for i, outboundOptions := range options.Outbounds {
 		var out adapter.Outbound
 		var tag string
@@ -138,23 +136,29 @@ func New(options Options) (*Box, error) {
 			tag,
 			outboundOptions)
 		if err != nil {
-			lastErrDesc = fmt.Sprintf("parse outbound[%d] error: %+v", i, err) // hiddify
+			lastErrDesc = fmt.Sprintf("parse outbound[%d] error: %+v", i, err) //hiddify
 			fmt.Println(lastErrDesc)
-			lastErr = err // hiddify
+			lastErr = err //hiddify
 			out = outbound.NewInvalidConfig(
 				logFactory.NewLogger(F.ToString("outbound/", outboundOptions.Type, "[", tag, "]")),
 				tag,
-				err) // hiddify
+				err) //hiddify
 		}
 
 		outbounds = append(outbounds, out)
 	}
-	if len(outbounds) == 0 && lastErr != nil { // hiddify
-		return nil, E.Cause(lastErr, lastErrDesc) // hiddify
-	} // hiddify
-
-	// hiddify initalization of router moved to preStart
-
+	if len(outbounds) == 0 && lastErr != nil { //hiddify
+		return nil, E.Cause(lastErr, lastErrDesc) //hiddify
+	} //hiddify
+	err = router.Initialize(inbounds, outbounds, func() adapter.Outbound {
+		out, oErr := outbound.New(ctx, router, logFactory.NewLogger("outbound/direct"), "direct", option.Outbound{Type: "direct", Tag: "default"})
+		common.Must(oErr)
+		outbounds = append(outbounds, out)
+		return out
+	})
+	if err != nil {
+		return nil, err
+	}
 	if options.PlatformInterface != nil {
 		err = options.PlatformInterface.Initialize(ctx, router)
 		if err != nil {
@@ -191,7 +195,6 @@ func New(options Options) (*Box, error) {
 		preServices2["v2ray api"] = v2rayServer
 	}
 	return &Box{
-		ctx:          ctx,
 		router:       router,
 		inbounds:     inbounds,
 		outbounds:    outbounds,
@@ -244,19 +247,9 @@ func (s *Box) Start() error {
 }
 
 func (s *Box) preStart() error {
-	err := s.router.Initialize(s.inbounds, s.outbounds, func() adapter.Outbound {
-		out, oErr := outbound.New(s.ctx, s.router, s.logFactory.NewLogger("outbound/direct"), "direct", option.Outbound{Type: "direct", Tag: "default"})
-		common.Must(oErr)
-		s.outbounds = append(s.outbounds, out)
-		return out
-	})
-	if err != nil {
-		return err
-	}
-
 	monitor := taskmonitor.New(s.logger, C.StartTimeout)
 	monitor.Start("start logger")
-	err = s.logFactory.Start()
+	err := s.logFactory.Start()
 	monitor.Finish()
 	if err != nil {
 		return E.Cause(err, "start logger")
@@ -321,11 +314,7 @@ func (s *Box) start() error {
 			return E.Cause(err, "initialize inbound/", in.Type(), "[", tag, "]")
 		}
 	}
-	err = s.postStart()
-	if err != nil {
-		return err
-	}
-	return s.router.Cleanup()
+	return s.postStart()
 }
 
 func (s *Box) postStart() error {
@@ -335,28 +324,16 @@ func (s *Box) postStart() error {
 			return E.Cause(err, "start ", serviceName)
 		}
 	}
-	// TODO: reorganize ALL start order
-	for _, out := range s.outbounds {
-		if lateOutbound, isLateOutbound := out.(adapter.PostStarter); isLateOutbound {
+	for _, outbound := range s.outbounds {
+		if lateOutbound, isLateOutbound := outbound.(adapter.PostStarter); isLateOutbound {
 			err := lateOutbound.PostStart()
 			if err != nil {
-				return E.Cause(err, "post-start outbound/", out.Tag())
+				return E.Cause(err, "post-start outbound/", outbound.Tag())
 			}
 		}
 	}
-	err := s.router.PostStart()
-	if err != nil {
-		return err
-	}
-	for _, in := range s.inbounds {
-		if lateInbound, isLateInbound := in.(adapter.PostStarter); isLateInbound {
-			err = lateInbound.PostStart()
-			if err != nil {
-				return E.Cause(err, "post-start inbound/", in.Tag())
-			}
-		}
-	}
-	return nil
+
+	return s.router.PostStart()
 }
 
 func (s *Box) Close() error {
@@ -420,24 +397,4 @@ func (s *Box) Close() error {
 
 func (s *Box) Router() adapter.Router {
 	return s.router
-}
-
-func (s *Box) AddPreService(name string, service adapter.Service) {
-	s.preServices2[name] = service
-}
-
-func (s *Box) AddPostService(name string, service adapter.Service) {
-	s.postServices[name] = service
-}
-
-func (s *Box) AddInbound(inb adapter.Inbound) {
-	s.inbounds = append(s.inbounds, inb)
-}
-
-func (s *Box) AddOutbound(out adapter.Outbound) {
-	s.outbounds = append(s.outbounds, out)
-}
-
-func (s *Box) GetLogger() log.ContextLogger {
-	return s.logger
 }

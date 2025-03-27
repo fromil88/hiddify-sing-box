@@ -7,12 +7,12 @@ import (
 	"net"
 	"os"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/tls"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	"github.com/fromil88/sing-box/common/tls"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing-quic/hysteria"
 	"github.com/sagernet/sing-quic/hysteria2"
 	"github.com/sagernet/sing/common"
@@ -20,7 +20,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing-box/outbound/houtbound"
+	"github.com/fromil88/sing-box/outbound/houtbound"
 )
 
 var (

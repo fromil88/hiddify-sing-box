@@ -6,11 +6,11 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -70,7 +70,7 @@ func NewDirect(router adapter.Router, logger log.ContextLogger, tag string, opti
 }
 
 func (h *Direct) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	switch h.overrideOption {
@@ -98,7 +98,7 @@ func (h *Direct) DialContext(ctx context.Context, network string, destination M.
 }
 
 func (h *Direct) DialParallel(ctx context.Context, network string, destination M.Socksaddr, destinationAddresses []netip.Addr) (net.Conn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	switch h.overrideOption {

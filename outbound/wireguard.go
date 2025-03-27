@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/outbound/houtbound"
-	"github.com/sagernet/sing-box/transport/wireguard"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
+	"github.com/fromil88/sing-box/outbound/houtbound"
+	"github.com/fromil88/sing-box/transport/wireguard"
 	dns "github.com/sagernet/sing-dns"
 	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
@@ -74,7 +74,7 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		ctx:          ctx,
 		workers:      options.Workers,
 		pauseManager: service.FromContext[pause.Manager](ctx),
-		hforwarder:   hforwarder, // hiddify
+		hforwarder:   hforwarder, //hiddify
 	}
 	outbound.fakePackets = []int{0, 0}
 	outbound.fakePacketsSize = []int{0, 0}
@@ -132,9 +132,6 @@ func NewWireGuard(ctx context.Context, router adapter.Router, logger log.Context
 		if err != nil {
 			return nil, E.Cause(err, "decode private key")
 		}
-		if len(bytes) != 32 {
-			return nil, E.New("invalid private key", options.PrivateKey)
-		}
 		privateKey = hex.EncodeToString(bytes)
 	}
 	outbound.ipcConf = "private_key=" + privateKey
@@ -159,10 +156,9 @@ func (w *WireGuard) Start() error {
 	if common.Any(w.peers, func(peer wireguard.PeerConfig) bool {
 		return !peer.Endpoint.IsValid()
 	}) {
-		return nil // start in post start
+		// wait for all outbounds to be started and continue in PortStart
+		return nil
 	}
-
-	// Proceed with starting WireGuard
 	return w.start()
 }
 
@@ -196,13 +192,6 @@ func (w *WireGuard) start() error {
 			reserved = w.peers[0].Reserved
 		}
 		bind = wireguard.NewClientBind(w.ctx, w, w.listener, isConnect, connectAddr, reserved)
-	}
-	if w.useStdNetBind || len(w.peers) > 1 {
-		for _, peer := range w.peers {
-			if peer.Reserved != [3]uint8{} {
-				bind.SetReservedForEndpoint(peer.Endpoint, peer.Reserved)
-			}
-		}
 	}
 	err = w.tunDevice.Start()
 	if err != nil {
@@ -264,9 +253,9 @@ func (w *WireGuard) start() error {
 }
 
 func (w *WireGuard) Close() error {
-	if w.hforwarder != nil { // hiddify
-		w.hforwarder.Close() // hiddify
-	} // hiddify
+	if w.hforwarder != nil { //hiddify
+		w.hforwarder.Close() //hiddify
+	} //hiddify
 	if w.device != nil {
 		w.device.Close()
 	}
@@ -338,13 +327,13 @@ func (w *WireGuard) onPauseUpdated(event int) {
 
 	case pause.EventDevicePaused:
 		w.device.Down()
-	case pause.EventNetworkPause: // hiddify already handled in Interface Updated
+	case pause.EventNetworkPause: //hiddify already handled in Interface Updated
 		err := w.device.Down()
 		w.logger.Info("Hiddify! Wirguard! downing net! err=", err)
 		<-time.After(50 * time.Millisecond)
 	case pause.EventDeviceWake:
 		w.device.Up()
-	case pause.EventNetworkWake: // hiddify already handled in Interface Updated
+	case pause.EventNetworkWake: //hiddify already handled in Interface Updated
 		err := w.device.Up()
 		w.logger.Info("Hiddify! Wirguard! Uping net! err=", err)
 		<-time.After(50 * time.Millisecond)

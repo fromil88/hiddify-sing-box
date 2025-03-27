@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"net"
 
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/outbound"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/outbound"
 	E "github.com/sagernet/sing/common/exceptions"
-	"github.com/sagernet/sing/common/varbin"
+	"github.com/sagernet/sing/common/rw"
 )
 
 func (c *CommandClient) SelectOutbound(groupTag string, outboundTag string) error {
@@ -20,11 +20,11 @@ func (c *CommandClient) SelectOutbound(groupTag string, outboundTag string) erro
 	if err != nil {
 		return err
 	}
-	err = varbin.Write(conn, binary.BigEndian, groupTag)
+	err = rw.WriteVString(conn, groupTag)
 	if err != nil {
 		return err
 	}
-	err = varbin.Write(conn, binary.BigEndian, outboundTag)
+	err = rw.WriteVString(conn, outboundTag)
 	if err != nil {
 		return err
 	}
@@ -32,11 +32,11 @@ func (c *CommandClient) SelectOutbound(groupTag string, outboundTag string) erro
 }
 
 func (s *CommandServer) handleSelectOutbound(conn net.Conn) error {
-	groupTag, err := varbin.ReadValue[string](conn, binary.BigEndian)
+	groupTag, err := rw.ReadVString(conn)
 	if err != nil {
 		return err
 	}
-	outboundTag, err := varbin.ReadValue[string](conn, binary.BigEndian)
+	outboundTag, err := rw.ReadVString(conn)
 	if err != nil {
 		return err
 	}

@@ -3,7 +3,7 @@ package option
 import (
 	"reflect"
 
-	C "github.com/sagernet/sing-box/constant"
+	C "github.com/fromil88/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
@@ -70,7 +70,6 @@ type DefaultRule struct {
 	Network                  Listable[string] `json:"network,omitempty"`
 	AuthUser                 Listable[string] `json:"auth_user,omitempty"`
 	Protocol                 Listable[string] `json:"protocol,omitempty"`
-	Client                   Listable[string] `json:"client,omitempty"`
 	Domain                   Listable[string] `json:"domain,omitempty"`
 	DomainSuffix             Listable[string] `json:"domain_suffix,omitempty"`
 	DomainKeyword            Listable[string] `json:"domain_keyword,omitempty"`
@@ -88,7 +87,6 @@ type DefaultRule struct {
 	PortRange                Listable[string] `json:"port_range,omitempty"`
 	ProcessName              Listable[string] `json:"process_name,omitempty"`
 	ProcessPath              Listable[string] `json:"process_path,omitempty"`
-	ProcessPathRegex         Listable[string] `json:"process_path_regex,omitempty"`
 	PackageName              Listable[string] `json:"package_name,omitempty"`
 	User                     Listable[string] `json:"user,omitempty"`
 	UserID                   Listable[int32]  `json:"user_id,omitempty"`
@@ -96,15 +94,12 @@ type DefaultRule struct {
 	WIFISSID                 Listable[string] `json:"wifi_ssid,omitempty"`
 	WIFIBSSID                Listable[string] `json:"wifi_bssid,omitempty"`
 	RuleSet                  Listable[string] `json:"rule_set,omitempty"`
-	RuleSetIPCIDRMatchSource bool             `json:"rule_set_ip_cidr_match_source,omitempty"`
+	RuleSetIPCIDRMatchSource bool             `json:"rule_set_ipcidr_match_source,omitempty"`
 	Invert                   bool             `json:"invert,omitempty"`
 	Outbound                 string           `json:"outbound,omitempty"`
-
-	// Deprecated: renamed to rule_set_ip_cidr_match_source
-	Deprecated_RulesetIPCIDRMatchSource bool `json:"rule_set_ipcidr_match_source,omitempty"`
 }
 
-func (r *DefaultRule) IsValid() bool {
+func (r DefaultRule) IsValid() bool {
 	var defaultValue DefaultRule
 	defaultValue.Invert = r.Invert
 	defaultValue.Outbound = r.Outbound

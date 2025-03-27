@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 
-	"github.com/sagernet/sing-box/experimental/libbox"
-	"github.com/sagernet/sing-box/log"
+	"github.com/fromil88/sing-box/experimental/libbox"
+	"github.com/fromil88/sing-box/log"
 )
 
 type CommandClientHandler struct {

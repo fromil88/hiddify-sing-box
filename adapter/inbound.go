@@ -5,8 +5,8 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/sagernet/sing-box/common/process"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/common/process"
+	"github.com/fromil88/sing-box/option"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -31,15 +31,10 @@ type InboundContext struct {
 	Network     string
 	Source      M.Socksaddr
 	Destination M.Socksaddr
+	Domain      string
+	Protocol    string
 	User        string
 	Outbound    string
-
-	// sniffer
-
-	Protocol     string
-	Domain       string
-	Client       string
-	SniffContext any
 
 	// cache
 
@@ -56,9 +51,7 @@ type InboundContext struct {
 
 	// rule cache
 
-	IPCIDRMatchSource bool
-	IPCIDRAcceptEmpty bool
-
+	IPCIDRMatchSource            bool
 	SourceAddressMatch           bool
 	SourcePortMatch              bool
 	DestinationAddressMatch      bool
@@ -69,7 +62,6 @@ type InboundContext struct {
 
 func (c *InboundContext) ResetRuleCache() {
 	c.IPCIDRMatchSource = false
-	c.IPCIDRAcceptEmpty = false
 	c.SourceAddressMatch = false
 	c.SourcePortMatch = false
 	c.DestinationAddressMatch = false
@@ -89,6 +81,15 @@ func ContextFrom(ctx context.Context) *InboundContext {
 		return nil
 	}
 	return metadata.(*InboundContext)
+}
+
+func AppendContext(ctx context.Context) (context.Context, *InboundContext) {
+	metadata := ContextFrom(ctx)
+	if metadata != nil {
+		return ctx, metadata
+	}
+	metadata = new(InboundContext)
+	return WithContext(ctx, metadata), metadata
 }
 
 func ExtendContext(ctx context.Context) (context.Context, *InboundContext) {

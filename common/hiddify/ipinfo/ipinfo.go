@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"net/url"
 
-	C "github.com/sagernet/sing-box/constant"
+	C "github.com/fromil88/sing-box/constant"
 
-	"github.com/sagernet/sing-box/log"
+	"github.com/fromil88/sing-box/log"
 
 	"time"
 

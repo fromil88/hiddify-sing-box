@@ -7,20 +7,20 @@ import (
 	"net"
 	"os"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/humanize"
-	"github.com/sagernet/sing-box/common/tls"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	"github.com/fromil88/sing-box/common/humanize"
+	"github.com/fromil88/sing-box/common/tls"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing-quic/hysteria"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing-box/outbound/houtbound"
+	"github.com/fromil88/sing-box/outbound/houtbound"
 )
 
 var (
@@ -66,8 +66,8 @@ func NewHysteria(ctx context.Context, router adapter.Router, logger log.ContextL
 	}
 	if len(options.Down) > 0 {
 		receiveBps, err = humanize.ParseBytes(options.Down)
-		if err != nil {
-			return nil, E.Cause(err, "invalid down speed format: ", options.Down)
+		if receiveBps == 0 {
+			return nil, E.New("invalid down speed format: ", options.Down)
 		}
 	} else {
 		receiveBps = uint64(options.DownMbps) * hysteria.MbpsToBps

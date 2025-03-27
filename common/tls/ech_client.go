@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	cftls "github.com/sagernet/cloudflare-tls"
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/option"
 	dns "github.com/sagernet/sing-dns"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/ntp"
@@ -63,7 +63,6 @@ type echConnWrapper struct {
 
 func (c *echConnWrapper) ConnectionState() tls.ConnectionState {
 	state := c.Conn.ConnectionState()
-	//nolint:staticcheck
 	return tls.ConnectionState{
 		Version:                     state.Version,
 		HandshakeComplete:           state.HandshakeComplete,

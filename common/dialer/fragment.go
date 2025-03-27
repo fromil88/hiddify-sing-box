@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	opts "github.com/sagernet/sing-box/option"
+	opts "github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"

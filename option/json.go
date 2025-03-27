@@ -1,6 +1,8 @@
 package option
 
 import (
+	"bytes"
+
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
@@ -67,5 +69,7 @@ func UnmarshallExcluded(inputContent []byte, parentObject any, object any) error
 	if err != nil {
 		return err
 	}
-	return json.UnmarshalDisallowUnknownFields(inputContent, object)
+	decoder := json.NewDecoder(bytes.NewReader(inputContent))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(object)
 }

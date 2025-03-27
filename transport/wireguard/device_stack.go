@@ -94,9 +94,6 @@ func (w *StackDevice) NewEndpoint() (stack.LinkEndpoint, error) {
 }
 
 func (w *StackDevice) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	if !destination.Addr.Is4() && !destination.Addr.Is6() {
-		return nil, E.New("Invalid destination Addr ", destination.Addr)
-	}
 	addr := tcpip.FullAddress{
 		NIC:  defaultNIC,
 		Port: destination.Port,
@@ -132,9 +129,6 @@ func (w *StackDevice) DialContext(ctx context.Context, network string, destinati
 }
 
 func (w *StackDevice) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	if !destination.Addr.Is4() && !destination.Addr.Is6() {
-		return nil, E.New("Invalid destination Addr ", destination.Addr)
-	}
 	bind := tcpip.FullAddress{
 		NIC: defaultNIC,
 	}
@@ -263,18 +257,12 @@ func (ep *wireEndpoint) MTU() uint32 {
 	return ep.mtu
 }
 
-func (ep *wireEndpoint) SetMTU(mtu uint32) {
-}
-
 func (ep *wireEndpoint) MaxHeaderLength() uint16 {
 	return 0
 }
 
 func (ep *wireEndpoint) LinkAddress() tcpip.LinkAddress {
 	return ""
-}
-
-func (ep *wireEndpoint) SetLinkAddress(addr tcpip.LinkAddress) {
 }
 
 func (ep *wireEndpoint) Capabilities() stack.LinkEndpointCapabilities {
@@ -313,10 +301,4 @@ func (ep *wireEndpoint) WritePackets(list stack.PacketBufferList) (int, tcpip.Er
 		}
 	}
 	return list.Len(), nil
-}
-
-func (ep *wireEndpoint) Close() {
-}
-
-func (ep *wireEndpoint) SetOnCloseAction(f func()) {
 }

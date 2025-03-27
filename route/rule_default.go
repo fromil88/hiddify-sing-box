@@ -1,17 +1,14 @@
 package route
 
 import (
-	"context"
-
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental/deprecated"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
-func NewRule(ctx context.Context, router adapter.Router, logger log.ContextLogger, options option.Rule, checkOutbound bool) (adapter.Rule, error) {
+func NewRule(router adapter.Router, logger log.ContextLogger, options option.Rule, checkOutbound bool) (adapter.Rule, error) {
 	switch options.Type {
 	case "", C.RuleTypeDefault:
 		if !options.DefaultOptions.IsValid() {
@@ -20,7 +17,7 @@ func NewRule(ctx context.Context, router adapter.Router, logger log.ContextLogge
 		if options.DefaultOptions.Outbound == "" && checkOutbound {
 			return nil, E.New("missing outbound field")
 		}
-		return NewDefaultRule(ctx, router, logger, options.DefaultOptions)
+		return NewDefaultRule(router, logger, options.DefaultOptions)
 	case C.RuleTypeLogical:
 		if !options.LogicalOptions.IsValid() {
 			return nil, E.New("missing conditions")
@@ -28,7 +25,7 @@ func NewRule(ctx context.Context, router adapter.Router, logger log.ContextLogge
 		if options.LogicalOptions.Outbound == "" && checkOutbound {
 			return nil, E.New("missing outbound field")
 		}
-		return NewLogicalRule(ctx, router, logger, options.LogicalOptions)
+		return NewLogicalRule(router, logger, options.LogicalOptions)
 	default:
 		return nil, E.New("unknown rule type: ", options.Type)
 	}
@@ -45,7 +42,7 @@ type RuleItem interface {
 	String() string
 }
 
-func NewDefaultRule(ctx context.Context, router adapter.Router, logger log.ContextLogger, options option.DefaultRule) (*DefaultRule, error) {
+func NewDefaultRule(router adapter.Router, logger log.ContextLogger, options option.DefaultRule) (*DefaultRule, error) {
 	rule := &DefaultRule{
 		abstractDefaultRule{
 			invert:   options.Invert,
@@ -79,11 +76,6 @@ func NewDefaultRule(ctx context.Context, router adapter.Router, logger log.Conte
 	}
 	if len(options.Protocol) > 0 {
 		item := NewProtocolItem(options.Protocol)
-		rule.items = append(rule.items, item)
-		rule.allItems = append(rule.allItems, item)
-	}
-	if len(options.Client) > 0 {
-		item := NewClientItem(options.Client)
 		rule.items = append(rule.items, item)
 		rule.allItems = append(rule.allItems, item)
 	}
@@ -182,14 +174,6 @@ func NewDefaultRule(ctx context.Context, router adapter.Router, logger log.Conte
 		rule.items = append(rule.items, item)
 		rule.allItems = append(rule.allItems, item)
 	}
-	if len(options.ProcessPathRegex) > 0 {
-		item, err := NewProcessPathRegexItem(options.ProcessPathRegex)
-		if err != nil {
-			return nil, E.Cause(err, "process_path_regex")
-		}
-		rule.items = append(rule.items, item)
-		rule.allItems = append(rule.allItems, item)
-	}
 	if len(options.PackageName) > 0 {
 		item := NewPackageNameItem(options.PackageName)
 		rule.items = append(rule.items, item)
@@ -221,16 +205,7 @@ func NewDefaultRule(ctx context.Context, router adapter.Router, logger log.Conte
 		rule.allItems = append(rule.allItems, item)
 	}
 	if len(options.RuleSet) > 0 {
-		var matchSource bool
-		if options.RuleSetIPCIDRMatchSource {
-			matchSource = true
-		} else
-		//nolint:staticcheck
-		if options.Deprecated_RulesetIPCIDRMatchSource {
-			matchSource = true
-			deprecated.Report(ctx, deprecated.OptionBadMatchSource)
-		}
-		item := NewRuleSetItem(router, options.RuleSet, matchSource, false)
+		item := NewRuleSetItem(router, options.RuleSet, options.RuleSetIPCIDRMatchSource)
 		rule.items = append(rule.items, item)
 		rule.allItems = append(rule.allItems, item)
 	}
@@ -243,7 +218,7 @@ type LogicalRule struct {
 	abstractLogicalRule
 }
 
-func NewLogicalRule(ctx context.Context, router adapter.Router, logger log.ContextLogger, options option.LogicalRule) (*LogicalRule, error) {
+func NewLogicalRule(router adapter.Router, logger log.ContextLogger, options option.LogicalRule) (*LogicalRule, error) {
 	r := &LogicalRule{
 		abstractLogicalRule{
 			rules:    make([]adapter.HeadlessRule, len(options.Rules)),
@@ -260,7 +235,7 @@ func NewLogicalRule(ctx context.Context, router adapter.Router, logger log.Conte
 		return nil, E.New("unknown logical mode: ", options.Mode)
 	}
 	for i, subRule := range options.Rules {
-		rule, err := NewRule(ctx, router, logger, subRule, false)
+		rule, err := NewRule(router, logger, subRule, false)
 		if err != nil {
 			return nil, E.Cause(err, "sub rule[", i, "]")
 		}

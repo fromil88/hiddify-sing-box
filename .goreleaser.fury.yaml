@@ -6,7 +6,7 @@ builds:
       - -v
       - -trimpath
     ldflags:
-      - -X github.com/sagernet/sing-box/constant.Version={{ .Version }} -s -w -buildid=
+      - -X github.com/fromil88/sing-box/constant.Version={{ .Version }} -s -w -buildid=
     tags:
       - with_gvisor
       - with_quic
@@ -49,19 +49,10 @@ nfpms:
       - src: release/config/config.json
         dst: /etc/sing-box/config.json
         type: config
-
       - src: release/config/sing-box.service
         dst: /usr/lib/systemd/system/sing-box.service
       - src: release/config/sing-box@.service
         dst: /usr/lib/systemd/system/sing-box@.service
-
-      - src: release/completions/sing-box.bash
-        dst: /usr/share/bash-completion/completions/sing-box.bash
-      - src: release/completions/sing-box.fish
-        dst: /usr/share/fish/vendor_completions.d/sing-box.fish
-      - src: release/completions/sing-box.zsh
-        dst: /usr/share/zsh/site-functions/_sing-box
-
       - src: LICENSE
         dst: /usr/share/licenses/sing-box/LICENSE
     deb:

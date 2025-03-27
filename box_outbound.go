@@ -3,9 +3,9 @@ package box
 import (
 	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/taskmonitor"
-	C "github.com/sagernet/sing-box/constant"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/taskmonitor"
+	C "github.com/fromil88/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -45,9 +45,7 @@ func (s *Box) startOutbounds() error {
 			}
 			started[outboundTag] = true
 			canContinue = true
-			if starter, isStarter := outboundToStart.(interface {
-				Start() error
-			}); isStarter {
+			if starter, isStarter := outboundToStart.(common.Starter); isStarter {
 				monitor.Start("initialize outbound/", outboundToStart.Type(), "[", outboundTag, "]")
 				err := starter.Start()
 				monitor.Finish()

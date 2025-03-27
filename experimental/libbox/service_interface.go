@@ -3,8 +3,8 @@ package libbox
 import (
 	"context"
 
-	box "github.com/sagernet/sing-box"
-	"github.com/sagernet/sing-box/common/urltest"
+	box "github.com/fromil88/sing-box"
+	"github.com/fromil88/sing-box/common/urltest"
 	"github.com/sagernet/sing/service/pause"
 )
 

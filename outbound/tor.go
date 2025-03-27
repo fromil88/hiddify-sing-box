@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -44,10 +44,10 @@ func NewTor(ctx context.Context, router adapter.Router, logger log.ContextLogger
 	startConf.ExtraArgs = options.ExtraArgs
 	if options.DataDirectory != "" {
 		dataDirAbs, _ := filepath.Abs(startConf.DataDir)
-		if geoIPPath := filepath.Join(dataDirAbs, "geoip"); rw.IsFile(geoIPPath) && !common.Contains(options.ExtraArgs, "--GeoIPFile") {
+		if geoIPPath := filepath.Join(dataDirAbs, "geoip"); rw.FileExists(geoIPPath) && !common.Contains(options.ExtraArgs, "--GeoIPFile") {
 			options.ExtraArgs = append(options.ExtraArgs, "--GeoIPFile", geoIPPath)
 		}
-		if geoIP6Path := filepath.Join(dataDirAbs, "geoip6"); rw.IsFile(geoIP6Path) && !common.Contains(options.ExtraArgs, "--GeoIPv6File") {
+		if geoIP6Path := filepath.Join(dataDirAbs, "geoip6"); rw.FileExists(geoIP6Path) && !common.Contains(options.ExtraArgs, "--GeoIPv6File") {
 			options.ExtraArgs = append(options.ExtraArgs, "--GeoIPv6File", geoIP6Path)
 		}
 	}
@@ -58,12 +58,8 @@ func NewTor(ctx context.Context, router adapter.Router, logger log.ContextLogger
 	}
 	if startConf.DataDir != "" {
 		torrcFile := filepath.Join(startConf.DataDir, "torrc")
-		err := rw.MkdirParent(torrcFile)
-		if err != nil {
-			return nil, err
-		}
-		if !rw.IsFile(torrcFile) {
-			err := os.WriteFile(torrcFile, []byte(""), 0o600)
+		if !rw.FileExists(torrcFile) {
+			err := rw.WriteFile(torrcFile, []byte(""))
 			if err != nil {
 				return nil, err
 			}

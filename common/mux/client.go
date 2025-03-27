@@ -4,9 +4,9 @@ import (
 	"context"
 	"net"
 
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing-mux"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"

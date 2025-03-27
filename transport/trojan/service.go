@@ -2,7 +2,6 @@ package trojan
 
 import (
 	"context"
-	"encoding/binary"
 	"net"
 
 	"github.com/sagernet/sing/common/auth"
@@ -77,8 +76,7 @@ func (s *Service[K]) NewConnection(ctx context.Context, conn net.Conn, metadata 
 		return E.Cause(err, "skip crlf")
 	}
 
-	var command byte
-	err = binary.Read(conn, binary.BigEndian, &command)
+	command, err := rw.ReadByte(conn)
 	if err != nil {
 		return E.Cause(err, "read command")
 	}

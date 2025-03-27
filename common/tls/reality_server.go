@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/sagernet/reality"
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common/debug"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -175,7 +175,6 @@ type realityConnWrapper struct {
 
 func (c *realityConnWrapper) ConnectionState() ConnectionState {
 	state := c.Conn.ConnectionState()
-	//nolint:staticcheck
 	return tls.ConnectionState{
 		Version:                     state.Version,
 		HandshakeComplete:           state.HandshakeComplete,

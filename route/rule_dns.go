@@ -1,19 +1,17 @@
 package route
 
 import (
-	"context"
 	"net/netip"
 
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental/deprecated"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
-func NewDNSRule(ctx context.Context, router adapter.Router, logger log.ContextLogger, options option.DNSRule, checkServer bool) (adapter.DNSRule, error) {
+func NewDNSRule(router adapter.Router, logger log.ContextLogger, options option.DNSRule, checkServer bool) (adapter.DNSRule, error) {
 	switch options.Type {
 	case "", C.RuleTypeDefault:
 		if !options.DefaultOptions.IsValid() {
@@ -22,7 +20,7 @@ func NewDNSRule(ctx context.Context, router adapter.Router, logger log.ContextLo
 		if options.DefaultOptions.Server == "" && checkServer {
 			return nil, E.New("missing server field")
 		}
-		return NewDefaultDNSRule(ctx, router, logger, options.DefaultOptions)
+		return NewDefaultDNSRule(router, logger, options.DefaultOptions)
 	case C.RuleTypeLogical:
 		if !options.LogicalOptions.IsValid() {
 			return nil, E.New("missing conditions")
@@ -30,7 +28,7 @@ func NewDNSRule(ctx context.Context, router adapter.Router, logger log.ContextLo
 		if options.LogicalOptions.Server == "" && checkServer {
 			return nil, E.New("missing server field")
 		}
-		return NewLogicalDNSRule(ctx, router, logger, options.LogicalOptions)
+		return NewLogicalDNSRule(router, logger, options.LogicalOptions)
 	default:
 		return nil, E.New("unknown rule type: ", options.Type)
 	}
@@ -45,7 +43,7 @@ type DefaultDNSRule struct {
 	clientSubnet *netip.Prefix
 }
 
-func NewDefaultDNSRule(ctx context.Context, router adapter.Router, logger log.ContextLogger, options option.DefaultDNSRule) (*DefaultDNSRule, error) {
+func NewDefaultDNSRule(router adapter.Router, logger log.ContextLogger, options option.DefaultDNSRule) (*DefaultDNSRule, error) {
 	rule := &DefaultDNSRule{
 		abstractDefaultRule: abstractDefaultRule{
 			invert:   options.Invert,
@@ -185,14 +183,6 @@ func NewDefaultDNSRule(ctx context.Context, router adapter.Router, logger log.Co
 		rule.items = append(rule.items, item)
 		rule.allItems = append(rule.allItems, item)
 	}
-	if len(options.ProcessPathRegex) > 0 {
-		item, err := NewProcessPathRegexItem(options.ProcessPathRegex)
-		if err != nil {
-			return nil, E.Cause(err, "process_path_regex")
-		}
-		rule.items = append(rule.items, item)
-		rule.allItems = append(rule.allItems, item)
-	}
 	if len(options.PackageName) > 0 {
 		item := NewPackageNameItem(options.PackageName)
 		rule.items = append(rule.items, item)
@@ -229,16 +219,7 @@ func NewDefaultDNSRule(ctx context.Context, router adapter.Router, logger log.Co
 		rule.allItems = append(rule.allItems, item)
 	}
 	if len(options.RuleSet) > 0 {
-		var matchSource bool
-		if options.RuleSetIPCIDRMatchSource {
-			matchSource = true
-		} else
-		//nolint:staticcheck
-		if options.Deprecated_RulesetIPCIDRMatchSource {
-			matchSource = true
-			deprecated.Report(ctx, deprecated.OptionBadMatchSource)
-		}
-		item := NewRuleSetItem(router, options.RuleSet, matchSource, options.RuleSetIPCIDRAcceptEmpty)
+		item := NewRuleSetItem(router, options.RuleSet, options.RuleSetIPCIDRMatchSource)
 		rule.items = append(rule.items, item)
 		rule.allItems = append(rule.allItems, item)
 	}
@@ -294,7 +275,7 @@ type LogicalDNSRule struct {
 	clientSubnet *netip.Prefix
 }
 
-func NewLogicalDNSRule(ctx context.Context, router adapter.Router, logger log.ContextLogger, options option.LogicalDNSRule) (*LogicalDNSRule, error) {
+func NewLogicalDNSRule(router adapter.Router, logger log.ContextLogger, options option.LogicalDNSRule) (*LogicalDNSRule, error) {
 	r := &LogicalDNSRule{
 		abstractLogicalRule: abstractLogicalRule{
 			rules:    make([]adapter.HeadlessRule, len(options.Rules)),
@@ -314,7 +295,7 @@ func NewLogicalDNSRule(ctx context.Context, router adapter.Router, logger log.Co
 		return nil, E.New("unknown logical mode: ", options.Mode)
 	}
 	for i, subRule := range options.Rules {
-		rule, err := NewDNSRule(ctx, router, logger, subRule, false)
+		rule, err := NewDNSRule(router, logger, subRule, false)
 		if err != nil {
 			return nil, E.Cause(err, "sub rule[", i, "]")
 		}

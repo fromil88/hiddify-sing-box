@@ -5,10 +5,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/conntrack"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/conntrack"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -50,26 +50,12 @@ func NewDefault(router adapter.Router, options option.DialerOptions) (*DefaultDi
 		dialer.Control = control.Append(dialer.Control, bindFunc)
 		listener.Control = control.Append(listener.Control, bindFunc)
 	}
-	var autoRedirectOutputMark uint32
-	if router != nil {
-		autoRedirectOutputMark = router.AutoRedirectOutputMark()
-	}
-	if autoRedirectOutputMark > 0 {
-		dialer.Control = control.Append(dialer.Control, control.RoutingMark(autoRedirectOutputMark))
-		listener.Control = control.Append(listener.Control, control.RoutingMark(autoRedirectOutputMark))
-	}
-	if options.RoutingMark > 0 {
+	if options.RoutingMark != 0 {
 		dialer.Control = control.Append(dialer.Control, control.RoutingMark(options.RoutingMark))
 		listener.Control = control.Append(listener.Control, control.RoutingMark(options.RoutingMark))
-		if autoRedirectOutputMark > 0 {
-			return nil, E.New("`auto_redirect` with `route_[_exclude]_address_set is conflict with `routing_mark`")
-		}
-	} else if router != nil && router.DefaultMark() > 0 {
+	} else if router != nil && router.DefaultMark() != 0 {
 		dialer.Control = control.Append(dialer.Control, control.RoutingMark(router.DefaultMark()))
 		listener.Control = control.Append(listener.Control, control.RoutingMark(router.DefaultMark()))
-		if autoRedirectOutputMark > 0 {
-			return nil, E.New("`auto_redirect` with `route_[_exclude]_address_set is conflict with `default_mark`")
-		}
 	}
 	if options.ReuseAddr {
 		listener.Control = control.Append(listener.Control, control.ReuseAddr())
@@ -81,7 +67,7 @@ func NewDefault(router adapter.Router, options option.DialerOptions) (*DefaultDi
 	if options.ConnectTimeout != 0 {
 		dialer.Timeout = time.Duration(options.ConnectTimeout)
 	} else {
-		dialer.Timeout = C.TCPConnectTimeout
+		dialer.Timeout = C.TCPTimeout
 	}
 	// TODO: Add an option to customize the keep alive period
 	dialer.KeepAlive = C.TCPKeepAliveInitial
@@ -205,7 +191,7 @@ func (d *DefaultDialer) ListenPacket(ctx context.Context, destination M.Socksadd
 }
 
 func (d *DefaultDialer) ListenPacketCompat(network, address string) (net.PacketConn, error) {
-	return d.udpListener.ListenPacket(context.Background(), network, address)
+	return trackPacketConn(d.udpListener.ListenPacket(context.Background(), network, address))
 }
 
 func trackConn(conn net.Conn, err error) (net.Conn, error) {

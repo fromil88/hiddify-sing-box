@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/sagernet/sing-box/log"
+	"github.com/fromil88/sing-box/log"
 
-	"github.com/sagernet/sing-box/experimental/libbox"
+	"github.com/fromil88/sing-box/experimental/libbox"
 )
 
 type CommandServerHandler struct {

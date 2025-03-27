@@ -4,13 +4,13 @@ import (
 	"context"
 	"net"
 
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/dialer"
-	"github.com/sagernet/sing-box/common/mux"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/transport/sip003"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/dialer"
+	"github.com/fromil88/sing-box/common/mux"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
+	"github.com/fromil88/sing-box/option"
+	"github.com/fromil88/sing-box/transport/sip003"
 	"github.com/sagernet/sing-shadowsocks2"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
@@ -79,7 +79,7 @@ func NewShadowsocks(ctx context.Context, router adapter.Router, logger log.Conte
 }
 
 func (h *Shadowsocks) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	if h.multiplexDialer == nil {
@@ -107,7 +107,7 @@ func (h *Shadowsocks) DialContext(ctx context.Context, network string, destinati
 }
 
 func (h *Shadowsocks) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	if h.multiplexDialer == nil {
@@ -149,7 +149,7 @@ var _ N.Dialer = (*shadowsocksDialer)(nil)
 type shadowsocksDialer Shadowsocks
 
 func (h *shadowsocksDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	switch N.NetworkName(network) {
@@ -177,7 +177,7 @@ func (h *shadowsocksDialer) DialContext(ctx context.Context, network string, des
 }
 
 func (h *shadowsocksDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-	ctx, metadata := adapter.ExtendContext(ctx)
+	ctx, metadata := adapter.AppendContext(ctx)
 	metadata.Outbound = h.tag
 	metadata.Destination = destination
 	outConn, err := h.dialer.DialContext(ctx, N.NetworkUDP, h.serverAddr)

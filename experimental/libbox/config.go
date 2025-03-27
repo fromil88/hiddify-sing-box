@@ -6,11 +6,10 @@ import (
 	"net/netip"
 	"os"
 
-	"github.com/sagernet/sing-box"
-	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/process"
-	"github.com/sagernet/sing-box/experimental/libbox/platform"
-	"github.com/sagernet/sing-box/option"
+	"github.com/fromil88/sing-box"
+	"github.com/fromil88/sing-box/adapter"
+	"github.com/fromil88/sing-box/common/process"
+	"github.com/fromil88/sing-box/option"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -55,7 +54,7 @@ func (s *platformInterfaceStub) UsePlatformAutoDetectInterfaceControl() bool {
 	return true
 }
 
-func (s *platformInterfaceStub) AutoDetectInterfaceControl(fd int) error {
+func (s *platformInterfaceStub) AutoDetectInterfaceControl() control.Func {
 	return nil
 }
 
@@ -135,21 +134,17 @@ func (s *interfaceMonitorStub) RegisterCallback(callback tun.DefaultInterfaceUpd
 func (s *interfaceMonitorStub) UnregisterCallback(element *list.Element[tun.DefaultInterfaceUpdateCallback]) {
 }
 
-func (s *platformInterfaceStub) SendNotification(notification *platform.Notification) error {
-	return nil
-}
-
-func FormatConfig(configContent string) (*StringBox, error) {
+func FormatConfig(configContent string) (string, error) {
 	options, err := parseConfig(configContent)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetIndent("", "  ")
 	err = encoder.Encode(options)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return wrapString(buffer.String()), nil
+	return buffer.String(), nil
 }

@@ -5,9 +5,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/sagernet/sing-box/adapter"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/log"
+	"github.com/fromil88/sing-box/adapter"
+	C "github.com/fromil88/sing-box/constant"
+	"github.com/fromil88/sing-box/log"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -52,8 +52,4 @@ func (h *InvalidConfig) NewPacketConnection(ctx context.Context, conn N.PacketCo
 	conn.Close()
 	h.logger.InfoContext(ctx, "InvalidConfiged packet connection to ", metadata.Destination)
 	return nil
-}
-
-func (h *InvalidConfig) Type() string {
-	return h.err.Error()
 }

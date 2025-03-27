@@ -3,7 +3,7 @@ package route
 import (
 	"strings"
 
-	"github.com/sagernet/sing-box/adapter"
+	"github.com/fromil88/sing-box/adapter"
 	"github.com/sagernet/sing/common/domain"
 )
 
@@ -38,7 +38,7 @@ func NewDomainItem(domains []string, domainSuffixes []string) *DomainItem {
 		}
 	}
 	return &DomainItem{
-		domain.NewMatcher(domains, domainSuffixes, false),
+		domain.NewMatcher(domains, domainSuffixes),
 		description,
 	}
 }
